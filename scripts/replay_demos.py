@@ -42,13 +42,13 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 from isaaclab.envs import ManagerBasedRLEnv
 try:
-    from dual_arm_il.configs.env_cfg import VisuomotorObsCfg
-except ModuleNotFoundError:
     from configs.env_cfg import VisuomotorObsCfg
+except ImportError:
+    from dual_arm_il.configs.env_cfg import VisuomotorObsCfg
 try:
-    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
-except ModuleNotFoundError:
     from configs.env_cfg import DualArmILEnvCfg
+except ImportError:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
 
 def main():
     if not os.path.exists(args_cli.dataset):
