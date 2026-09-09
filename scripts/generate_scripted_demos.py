@@ -840,7 +840,9 @@ def main():
             policy_obs = obs["policy"].squeeze(0).detach().cpu().numpy()
             rgb_image = obs["image"]["rgb"].squeeze(0).detach().cpu().numpy()
             if rgb_image.dtype != np.uint8:
-                rgb_image = rgb_image.astype(np.uint8)
+                if rgb_image.max() <= 1.0:
+                    rgb_image = (rgb_image * 255.0)
+                rgb_image = np.clip(rgb_image, 0, 255).astype(np.uint8)
 
             action_np = action.squeeze(0).detach().cpu().numpy()
             ep_obs.append(policy_obs)

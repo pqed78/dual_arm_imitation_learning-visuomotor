@@ -179,9 +179,12 @@ def main():
         if "image" in obs_dict and "rgb" in obs_dict["image"]:
             rgb_data = obs_dict["image"]["rgb"]
             if rgb_data is not None:
+
                 rgb_np = rgb_data.clone().detach().cpu().numpy()
                 if rgb_np.dtype != np.uint8:
-                    rgb_np = rgb_np.astype(np.uint8)
+                    if rgb_np.max() <= 1.0:
+                        rgb_np = (rgb_np * 255.0)
+                    rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
                 
                 # Stack images horizontally
                 grid_img = np.concatenate(rgb_np[:num_parallel], axis=1)
