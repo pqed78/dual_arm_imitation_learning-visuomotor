@@ -33,6 +33,7 @@ parser.add_argument(
     help="Path to HDF5 dataset file.",
 )
 parser.add_argument("--demo_idx", type=int, default=0, help="Demo index to replay (or -1 for all).")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of demos to replay simultaneously.")
 parser.add_argument("--delay", type=float, default=0.02, help="Delay between steps in seconds.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -47,22 +48,34 @@ try:
 except ModuleNotFoundError:
     from configs.env_cfg import DualArmILEnvCfg
 
-
-def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, delay: float):
-    print(f"\n--- Replaying {demo_name} ({len(actions)} steps) ---")
+def replay_batch_demos(env: ManagerBasedRLEnv, actions_list: list, demo_names: list, delay: float):
+    print(f"\n--- Replaying {len(demo_names)} demos simultaneously: {demo_names[0]} ~ {demo_names[-1]} ---")
     env.reset()
 
-    for step_idx, act in enumerate(actions):
+    max_steps = max(len(acts) for acts in actions_list)
+    num_envs = len(actions_list)
+
+    for step_idx in range(max_steps):
         if not simulation_app.is_running():
             break
-
-        act_t = torch.tensor(act, dtype=torch.float32, device=args_cli.device).unsqueeze(0)
+        
+        # Build batch action tensor
+        batch_acts = []
+        for env_idx in range(num_envs):
+            acts = actions_list[env_idx]
+            if step_idx < len(acts):
+                batch_acts.append(acts[step_idx])
+            else:
+                # Repeat last action if this demo finished early
+                batch_acts.append(acts[-1])
+                
+        act_t = torch.tensor(batch_acts, dtype=torch.float32, device=args_cli.device)
         env.step(act_t)
 
         if delay > 0:
             time.sleep(delay)
 
-    print(f"Finished {demo_name}.")
+    print(f"Finished replaying {len(demo_names)} demos.")
 
 
 def main():
@@ -70,6 +83,7 @@ def main():
         raise FileNotFoundError(f"Dataset not found: {args_cli.dataset}")
 
     env_cfg = DualArmILEnvCfg()
+    env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
 
@@ -84,19 +98,24 @@ def main():
             return
 
         if args_cli.demo_idx >= 0:
-            target_key = f"demo_{args_cli.demo_idx}"
-            if target_key not in demo_keys:
-                print(f"[Replay] Demo index {args_cli.demo_idx} not found. Available: {demo_keys}")
-                env.close()
-                simulation_app.close()
-                return
-            target_demos = [target_key]
+            target_demos = [f"demo_{args_cli.demo_idx}"]
         else:
             target_demos = demo_keys
+            
+        # Group demos into batches of size num_envs
+        for i in range(0, len(target_demos), args_cli.num_envs):
+            batch_keys = target_demos[i : i + args_cli.num_envs]
+            
+            # If the last batch is smaller than num_envs, we must stop, 
+            # because the environment was instantiated with a fixed num_envs.
+            if len(batch_keys) < args_cli.num_envs:
+                # Pad with the first demo in the batch to match num_envs
+                print(f"Padding last batch to match num_envs={args_cli.num_envs}")
+                while len(batch_keys) < args_cli.num_envs:
+                    batch_keys.append(batch_keys[0])
 
-        for key in target_demos:
-            actions = data_grp[key]["actions"][:]
-            replay_single_demo(env, actions, key, args_cli.delay)
+            actions_list = [data_grp[key]["actions"][:] for key in batch_keys]
+            replay_batch_demos(env, actions_list, batch_keys, args_cli.delay)
             time.sleep(1.0)
 
     env.close()

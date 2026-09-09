@@ -101,6 +101,9 @@ python scripts/replay_demos.py --demo_idx=0
 
 # Sequentially replay all collected demos
 python scripts/replay_demos.py --demo_idx=-1
+
+# Replay multiple demos in parallel (e.g., 4 environments simultaneously)
+python scripts/replay_demos.py --demo_idx=-1 --num_envs=4
 ```
 
 ---
@@ -296,11 +299,14 @@ python teleop/collect_demos.py --num_demos=20
 녹화된 HDF5 궤적이 시뮬레이션 물리 환경에서 안정적으로 동작하는지 재생해 봅니다.
 
 ```bash
-# 0번 데모 재생
+# 0번 데모 1개 재생
 python scripts/replay_demos.py --demo_idx=0
 
 # 전체 수집된 데모 순차 재생
 python scripts/replay_demos.py --demo_idx=-1
+
+# 여러 개의 데모를 동시에 재생 (예: 4개 환경 동시 렌더링)
+python scripts/replay_demos.py --demo_idx=-1 --num_envs=4
 ```
 
 ---
