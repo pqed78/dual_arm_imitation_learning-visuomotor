@@ -115,8 +115,6 @@ def main():
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
     env.reset()
     
-    cv2.namedWindow("Visuomotor Replay - Camera View", cv2.WINDOW_NORMAL)
-    
     # Setup Video Writer
     video_out = None
     
@@ -184,8 +182,6 @@ def main():
                     grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
                     
                 cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                cv2.imshow("Visuomotor Replay - Camera View", grid_img)
-                cv2.waitKey(1)
                 
                 # Write to video
                 if video_out is None:
@@ -202,7 +198,6 @@ def main():
     if video_out is not None:
         video_out.release()
         print("Saved replay video to replay_video.mp4")
-    cv2.destroyAllWindows()
     env.close()
     simulation_app.close()
 
