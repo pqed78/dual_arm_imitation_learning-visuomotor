@@ -174,11 +174,6 @@ def main():
                     grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
                     
                 cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR)
-                elif grid_img.shape[-1] == 4:
-                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
-                    
                 cv2.imshow("Visuomotor Replay - Camera View", grid_img)
                 cv2.waitKey(1)
         
