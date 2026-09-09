@@ -13,6 +13,8 @@ import sys
 import time
 import h5py
 import torch
+import cv2
+import numpy as np
 
 from isaaclab.app import AppLauncher
 
@@ -149,11 +151,33 @@ def main():
         
         env.sim.step()
         
+        # Update scene to render sensors
+        env.scene.update(dt=env.physics_dt)
+        
+        # Display camera view
+        if "front_camera" in env.scene.sensors:
+            rgb_data = env.scene["front_camera"].data.output["rgb"]
+            if rgb_data is not None:
+                rgb_np = rgb_data.clone().detach().cpu().numpy()
+                
+                # Stack images horizontally
+                grid_img = np.concatenate(rgb_np[:num_parallel], axis=1)
+                
+                # Convert to BGR for OpenCV
+                if grid_img.shape[-1] == 3:
+                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR)
+                elif grid_img.shape[-1] == 4:
+                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
+                    
+                cv2.imshow("Visuomotor Replay - Camera View", grid_img)
+                cv2.waitKey(1)
+        
         if args_cli.delay > 0:
             time.sleep(args_cli.delay)
 
     print("Finished kinematic replay.")
     time.sleep(2.0)
+    cv2.destroyAllWindows()
     env.close()
     simulation_app.close()
 
