@@ -151,14 +151,17 @@ def main():
         
         env.sim.step()
         
-        # Update scene to render sensors
+        # Update scene and compute observations to render camera
         env.scene.update(dt=env.physics_dt)
+        obs_dict = env.observation_manager.compute()
         
         # Display camera view
-        if "front_camera" in env.scene.sensors:
-            rgb_data = env.scene["front_camera"].data.output["rgb"]
+        if "image" in obs_dict and "rgb" in obs_dict["image"]:
+            rgb_data = obs_dict["image"]["rgb"]
             if rgb_data is not None:
                 rgb_np = rgb_data.clone().detach().cpu().numpy()
+                if rgb_np.dtype != np.uint8:
+                    rgb_np = rgb_np.astype(np.uint8)
                 
                 # Stack images horizontally
                 grid_img = np.concatenate(rgb_np[:num_parallel], axis=1)
