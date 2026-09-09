@@ -471,7 +471,6 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 >    - `scripts/eval.py`: `gym.make("Isaac-Dual-Arm-IL-v0")` 호출 전 반드시 `gym.register`로 로컬 `DualArmILEnvCfg` 강제 매핑. 모델 로드 후 시뮬레이션 환경에서 루프를 돌며 평가.
 >    - `teleop/collect_demos.py`: 키보드 이벤트를 받아 로봇을 제어하고, 에피소드 성공(Y) 시 현재까지의 `obs`, `actions`, `images`를 버퍼에서 HDF5로 `demo_0`, `demo_1` 그룹으로 Append.
 >    - `scripts/generate_scripted_demos.py`: Isaac Lab의 `DifferentialInverseKinematics`를 활용하여, 타겟 큐브의 위치를 파악한 뒤 양팔이 부드럽게 Pick & Place 궤적을 그리도록 Waypoint를 생성하고 HDF5에 자동 저장.
->
-> 10. **코드 100% 완벽 복제 지침 (`setup_project.sh`)**:
->     각 파일의 로직을 스스로 처음부터 다시 구현할 필요 없이, 프로젝트에 동봉된 `setup_project.sh` 스크립트를 `run_command` 도구로 실행해 줘. 이 스크립트 안에는 3,400줄에 달하는 모든 핵심 코드들이 하드코딩 되어 있어서, 한 번만 실행하면 전체 폴더와 내부 코드가 100% 동일하게 에러 없이 자동 생성될 거야. 
+> 10. **코드 100% 완벽 복제 지침 (`setup_project.sh` 또는 `project_codebase.md`)**:
+>     각 파일의 로직을 스스로 처음부터 다시 구현할 필요 없이, 프로젝트에 동봉된 `setup_project.sh` 스크립트를 실행하거나 `project_codebase.md` 파일을 읽어줘. 이 파일들 안에는 3,400줄에 달하는 모든 핵심 코드들이 하드코딩 되어 있어서, 스크립트를 실행하거나 마크다운의 코드 블록을 그대로 파싱하여 저장하면 100% 동일하게 에러 없이 자동 생성될 거야. 
 > **[복사할 프롬프트 끝]**
