@@ -42,6 +42,10 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 from isaaclab.envs import ManagerBasedRLEnv
 try:
+    from dual_arm_il.configs.env_cfg import VisuomotorObsCfg
+except ModuleNotFoundError:
+    from configs.env_cfg import VisuomotorObsCfg
+try:
     from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
 except ModuleNotFoundError:
     from configs.env_cfg import DualArmILEnvCfg
@@ -111,8 +115,18 @@ def main():
             disable_gravity=True,
         )
     env_cfg.scene.num_envs = num_parallel
+    env_cfg.observations = VisuomotorObsCfg()
 
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
+    try:
+        gym.register(
+            id="Isaac-Dual-Arm-IL-v0",
+            entry_point="isaaclab.envs:ManagerBasedRLEnv",
+            disable_env_checker=True,
+            kwargs={"env_cfg_entry_point": env_cfg.__class__},
+        )
+    except Exception:
+        pass
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
     env.reset()
     
     # Setup Video Writer
