@@ -35,6 +35,7 @@ parser.add_argument("--num_envs", type=int, default=1, help="Number of demos to 
 parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+args_cli.enable_cameras = True  # Force enable cameras for rendering
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
