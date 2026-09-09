@@ -93,7 +93,7 @@ def solve_dls_ik(
     return delta_q.unsqueeze(0)
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, object_poses: list, robot_joint_poses: list, init_robot_pos: list, init_robot_quat: list, init_target_pos: list, init_target_quat: list):
     """Save a single successful demonstration to the HDF5 file."""
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
 
@@ -109,6 +109,12 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         demo_group.create_dataset("obs", data=obs_array, compression="gzip")
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
+        demo_group.create_dataset("object_poses", data=np.array(object_poses, dtype=np.float32), compression="gzip")
+        demo_group.create_dataset("robot_joint_poses", data=np.array(robot_joint_poses, dtype=np.float32), compression="gzip")
+        demo_group.create_dataset("init_robot_pos", data=np.array(init_robot_pos, dtype=np.float32))
+        demo_group.create_dataset("init_robot_quat", data=np.array(init_robot_quat, dtype=np.float32))
+        demo_group.create_dataset("init_target_pos", data=np.array(init_target_pos, dtype=np.float32))
+        demo_group.create_dataset("init_target_quat", data=np.array(init_target_quat, dtype=np.float32))
         demo_group.attrs["num_samples"] = len(act_array)
 
         # Update total samples attribute in data group
@@ -123,7 +129,7 @@ def main():
 
     # Initialize environment
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
-    robot = env.scene["robot"]
+    robot = robot
 
     # Locate body indices and joint indices
     # Right arm: "panda_hand_0", joints "panda_joint[1-7]_0"
@@ -174,6 +180,12 @@ def main():
         ep_obs = []
         ep_actions = []
         ep_rewards = []
+        object_poses = []
+        robot_joint_poses = []
+        init_robot_pos = robot.data.root_pos_w.cpu().numpy()[0].copy()
+        init_robot_quat = robot.data.root_quat_w.cpu().numpy()[0].copy()
+        init_target_pos = target.data.root_pos_w.cpu().numpy()[0].copy()
+        init_target_quat = target.data.root_quat_w.cpu().numpy()[0].copy()
 
         print(f"\n>>> Starting Episode for Demo #{collected_count} (Target: {target_count}) <<<")
 
@@ -222,6 +234,8 @@ def main():
 
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
+            object_poses.append(obj.data.root_state_w.cpu().numpy()[0])
+            robot_joint_poses.append(robot.data.joint_pos.cpu().numpy()[0])
 
             # 5. Step simulation
             obs, reward, terminated, truncated, _ = env.step(action)
@@ -235,6 +249,12 @@ def main():
                     ep_obs,
                     ep_actions,
                     ep_rewards,
+                    object_poses,
+                    robot_joint_poses,
+                    init_robot_pos,
+                    init_robot_quat,
+                    init_target_pos,
+                    init_target_quat,
                 )
                 collected_count += 1
                 teleop.reset_episode_flags()

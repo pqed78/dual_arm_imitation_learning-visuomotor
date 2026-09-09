@@ -1,11 +1,15 @@
-# Copyright (c) 2026, Dual Arm Imitation Learning Project.
+import os
+
+script_path = "scripts/replay_demos.py"
+
+new_code = """# Copyright (c) 2026, Dual Arm Imitation Learning Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Replay Demonstrations Script (Kinematic / Visuomotor).
+\"\"\"Replay Demonstrations Script (Kinematic / Visuomotor).
 
 Replays recorded demonstration trajectories in Isaac Sim kinematically
 to visually inspect and verify motion quality and task success.
-"""
+\"\"\"
 
 import argparse
 import os
@@ -113,7 +117,7 @@ def main():
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
     env.reset()
     
-    print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
+    print(f"\\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
     
     obj_state = env.scene["object"].data.default_root_state.clone()
     tgt_state = env.scene["target"].data.default_root_state.clone()
@@ -159,3 +163,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""
+
+with open(script_path, "w") as f:
+    f.write(new_code)
+print("replay_demos.py patched.")

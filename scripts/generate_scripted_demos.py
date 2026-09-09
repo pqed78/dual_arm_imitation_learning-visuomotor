@@ -224,7 +224,7 @@ def compute_tcp(wrist_pos: torch.Tensor, wrist_quat: torch.Tensor) -> tuple[torc
     return tcp_pos, z_dir
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, images: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, images: list, actions: list, rewards: list, object_poses: list, robot_joint_poses: list, init_robot_pos: list, init_robot_quat: list, init_target_pos: list, init_target_quat: list):
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
     mode = "a" if os.path.exists(hdf5_path) else "w"
     with h5py.File(hdf5_path, mode) as f:
@@ -241,6 +241,12 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, images
         demo_group.create_dataset("images", data=img_array, compression="gzip")
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
+        demo_group.create_dataset("object_poses", data=np.array(object_poses, dtype=np.float32), compression="gzip")
+        demo_group.create_dataset("robot_joint_poses", data=np.array(robot_joint_poses, dtype=np.float32), compression="gzip")
+        demo_group.create_dataset("init_robot_pos", data=np.array(init_robot_pos, dtype=np.float32))
+        demo_group.create_dataset("init_robot_quat", data=np.array(init_robot_quat, dtype=np.float32))
+        demo_group.create_dataset("init_target_pos", data=np.array(init_target_pos, dtype=np.float32))
+        demo_group.create_dataset("init_target_quat", data=np.array(init_target_quat, dtype=np.float32))
         demo_group.attrs["num_samples"] = len(act_array)
 
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
