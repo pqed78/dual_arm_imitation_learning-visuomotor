@@ -115,6 +115,11 @@ def main():
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
     env.reset()
     
+    cv2.namedWindow("Visuomotor Replay - Camera View", cv2.WINDOW_NORMAL)
+    
+    # Setup Video Writer
+    video_out = None
+    
     print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
     
     obj_state = env.scene["object"].data.default_root_state.clone()
@@ -156,6 +161,8 @@ def main():
         obs_dict = env.observation_manager.compute()
         
         # Display camera view
+        if "image" not in obs_dict:
+            print(f"DEBUG: 'image' not in obs_dict. Keys are: {list(obs_dict.keys())}")
         if "image" in obs_dict and "rgb" in obs_dict["image"]:
             rgb_data = obs_dict["image"]["rgb"]
             if rgb_data is not None:
@@ -179,12 +186,22 @@ def main():
                 cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 cv2.imshow("Visuomotor Replay - Camera View", grid_img)
                 cv2.waitKey(1)
+                
+                # Write to video
+                if video_out is None:
+                    h, w = grid_img.shape[:2]
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    video_out = cv2.VideoWriter('replay_video.mp4', fourcc, 30.0, (w, h))
+                video_out.write(grid_img)
         
         if args_cli.delay > 0:
             time.sleep(args_cli.delay)
 
     print("Finished kinematic replay.")
     time.sleep(2.0)
+    if video_out is not None:
+        video_out.release()
+        print("Saved replay video to replay_video.mp4")
     cv2.destroyAllWindows()
     env.close()
     simulation_app.close()
