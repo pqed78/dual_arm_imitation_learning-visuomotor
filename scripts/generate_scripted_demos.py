@@ -386,6 +386,12 @@ def main():
         ep_images = []
         ep_actions = []
         ep_rewards = []
+        object_poses = []
+        robot_joint_poses = []
+        init_robot_pos = robot.data.root_pos_w.cpu().numpy()[0].copy()
+        init_robot_quat = robot.data.root_quat_w.cpu().numpy()[0].copy()
+        init_target_pos = target.data.root_pos_w.cpu().numpy()[0].copy()
+        init_target_quat = target.data.root_quat_w.cpu().numpy()[0].copy()
 
         print(f"\n>>> Generating Scripted Demo #{collected_count} (Target: {target_count}) <<<")
 
@@ -840,6 +846,8 @@ def main():
             ep_obs.append(policy_obs)
             ep_images.append(rgb_image)
             ep_actions.append(action_np)
+            object_poses.append(obj.data.root_state_w.cpu().numpy()[0])
+            robot_joint_poses.append(robot.data.joint_pos.cpu().numpy()[0])
 
             # Step simulation
             obs, reward, terminated, truncated, _ = env.step(action)
@@ -856,6 +864,12 @@ def main():
                         ep_images,
                         ep_actions,
                         ep_rewards,
+                        object_poses,
+                        robot_joint_poses,
+                        init_robot_pos,
+                        init_robot_quat,
+                        init_target_pos,
+                        init_target_quat,
                     )
                     collected_count += 1
                     print(f"  [✓] Successfully collected Demo #{collected_count-1} in {step} steps! (dist={dist_to_target:.3f}m)")
