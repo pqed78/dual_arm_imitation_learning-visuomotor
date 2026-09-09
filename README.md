@@ -127,6 +127,10 @@ python scripts/train.py --algo=act --epochs=150
   ```bash
   python scripts/train.py --algo=diffusion --epochs=100 --resume="checkpoints/diffusion/best_model.pt"
   ```
+- **Training Speed Optimization (`--num_workers`)**: By default, it uses 16 CPU workers to parallel load HDF5 images (`pin_memory=True`). If epoch time is long, you can increase this up to your machine's core count.
+  ```bash
+  python scripts/train.py --algo=diffusion --epochs=150 --num_workers=32
+  ```
 
 ---
 
@@ -324,6 +328,11 @@ python scripts/train.py --algo=act --epochs=150
 - **학습 이어하기 (Resume)**: `--resume` 옵션을 사용해 기존에 학습된 가중치부터 이어서 학습할 수 있습니다.
   ```bash
   python scripts/train.py --algo=diffusion --epochs=100 --resume="checkpoints/diffusion/best_model.pt"
+  ```
+- **학습 속도 최적화 (`--num_workers`)**: 기본적으로 16개의 CPU 워커를 사용해 HDF5 이미지를 병렬로 로드(`pin_memory=True`)합니다. 1에포크 소요 시간이 길다면 장비의 코어 수에 맞춰 워커를 늘려보세요.
+  ```bash
+  # 32코어를 사용하여 디스크 I/O 병목 돌파 및 학습 속도 극대화
+  python scripts/train.py --algo=diffusion --epochs=150 --num_workers=32
   ```
 
 ---

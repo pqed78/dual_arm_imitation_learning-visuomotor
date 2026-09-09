@@ -58,6 +58,7 @@ def parse_args():
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument("--resume", type=str, default=None, help="Path to a checkpoint file to resume training from.")
+    parser.add_argument("--num_workers", type=int, default=16, help="Number of CPU workers for DataLoader.")
     return parser.parse_args()
 
 
@@ -180,8 +181,27 @@ def main():
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    # Optimize DataLoader for lazy HDF5 loading
+    num_workers = args.num_workers
+    print(f" CPU Workers: {num_workers}")
+    
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=batch_size, 
+        shuffle=True, 
+        drop_last=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True if num_workers > 0 else False
+    )
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=batch_size, 
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True if num_workers > 0 else False
+    )
 
     # Instantiate Model
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)
