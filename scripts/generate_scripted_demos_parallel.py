@@ -366,8 +366,8 @@ def main():
         obs, _ = env.reset()
 
         # Initialize commanded joint targets from the robot's safe standby positions
-        commanded_left = left_standby_joints.clone().repeat(num_envs, 1)
-        commanded_right = right_standby_joints.clone().repeat(num_envs, 1)
+        commanded_left = left_standby_joints.clone()
+        commanded_right = right_standby_joints.clone()
 
         left_gripper_cmd = torch.ones((num_envs, 1), device=args_cli.device)
         right_gripper_cmd = torch.ones((num_envs, 1), device=args_cli.device)
@@ -486,7 +486,7 @@ def main():
                     place_target = obj_pos + latched_align_signs[i] * 0.055 * latched_cube_zs[i]
 
                 # Handover zone (between both arms)
-                handover_pos = env.scene.env_origins + torch.tensor([[0.30, 0.0, 0.20]], device=args_cli.device)
+                handover_pos = env.scene.env_origins[i:i+1] + torch.tensor([[0.30, 0.0, 0.20]], device=args_cli.device)
                 # Left arm pre-handover hover position: 20cm in +Y, 12cm above handover zone
                 left_wait_pos = handover_pos.clone()
                 left_wait_pos[:, 1] += 0.20
@@ -503,14 +503,14 @@ def main():
                     right_gripper_cmd[i, 0] = 1.0
                     left_gripper_cmd[i, 0] = 1.0
                     # Smoothly swing left arm to safe standby posture (+Y quadrant)
-                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints - commanded_left[i:i+1], min=-0.04, max=0.04)
+                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints[i:i+1] - commanded_left[i:i+1], min=-0.04, max=0.04)
                     if phase_timers[i] > 15:
                         phases[i] = PHASE_RIGHT_HOVER
                         phase_timers[i] = 0
 
                 elif phases[i] == PHASE_RIGHT_HOVER:
                     # Left arm holds safe standby posture away from center
-                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints - commanded_left[i:i+1], min=-0.04, max=0.04)
+                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints[i:i+1] - commanded_left[i:i+1], min=-0.04, max=0.04)
                     hover_tgt = pick_target.clone()
                     hover_tgt[:, 2] = pick_target[:, 2] + 0.08
                     err = hover_tgt - tcp_pos_r
@@ -526,7 +526,7 @@ def main():
 
                 elif phases[i] == PHASE_RIGHT_DESCEND:
                     # Left arm holds standby
-                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints - commanded_left[i:i+1], min=-0.04, max=0.04)
+                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints[i:i+1] - commanded_left[i:i+1], min=-0.04, max=0.04)
                     # Descend to center of cuboid (TCP Z=0.025, to avoid fingertips crashing into table)
                     descend_tgt = pick_target.clone()
                     descend_tgt[:, 2] = torch.clamp(pick_target[:, 2], min=0.025)
@@ -548,7 +548,7 @@ def main():
 
                 elif phases[i] == PHASE_RIGHT_GRASP:
                     # Left arm holds standby
-                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints - commanded_left[i:i+1], min=-0.04, max=0.04)
+                    commanded_left[i:i+1] = commanded_left[i:i+1] + torch.clamp(left_standby_joints[i:i+1] - commanded_left[i:i+1], min=-0.04, max=0.04)
                     # Close right gripper tightly around baton
                     right_gripper_cmd[i, 0] = -1.0
                     if phase_timers[i] > 25:
@@ -710,14 +710,14 @@ def main():
                     left_gripper_cmd[i, 0] = -1.0
                     right_gripper_cmd[i, 0] = 1.0
                     # Right arm smoothly moves to safe right standby posture (-Y quadrant)
-                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints - commanded_right[i:i+1], min=-0.04, max=0.04)
+                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints[i:i+1] - commanded_right[i:i+1], min=-0.04, max=0.04)
                     if phase_timers[i] > 15:
                         phases[i] = PHASE_LEFT_HOVER_TARGET
                         phase_timers[i] = 0
 
                 elif phases[i] == PHASE_LEFT_HOVER_TARGET:
                     # Right arm stays safely parked in right standby posture
-                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints - commanded_right[i:i+1], min=-0.04, max=0.04)
+                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints[i:i+1] - commanded_right[i:i+1], min=-0.04, max=0.04)
                     # Manual tuning to compensate for physical drop/slip offset (pull back from +X, +Y)
                     manual_offset = torch.tensor([[-0.08, -0.08, 0.0]], device=args_cli.device)
                     final_place_target = target_pos + latched_left_grasp_offsets[i] + manual_offset
@@ -738,7 +738,7 @@ def main():
 
                 elif phases[i] == PHASE_LEFT_LOWER_TARGET:
                     # Right arm stays safely parked in right standby posture
-                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints - commanded_right[i:i+1], min=-0.04, max=0.04)
+                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints[i:i+1] - commanded_right[i:i+1], min=-0.04, max=0.04)
                     # Gently lower baton onto target (Z=0.022m, soft landing 2mm above table surface)
                     manual_offset = torch.tensor([[-0.08, -0.08, 0.0]], device=args_cli.device)
                     final_place_target = target_pos + latched_left_grasp_offsets[i] + manual_offset
@@ -757,7 +757,7 @@ def main():
 
                 elif phases[i] == PHASE_LEFT_RELEASE:
                     # Right arm stays parked in right standby posture
-                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints - commanded_right[i:i+1], min=-0.04, max=0.04)
+                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints[i:i+1] - commanded_right[i:i+1], min=-0.04, max=0.04)
                     # Open left gripper to release baton on target
                     left_gripper_cmd[i, 0] = 1.0
                     if phase_timers[i] > 10:
@@ -766,7 +766,7 @@ def main():
 
                 elif phases[i] == PHASE_LEFT_RETREAT:
                     # Right arm stays parked in right standby posture
-                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints - commanded_right[i:i+1], min=-0.04, max=0.04)
+                    commanded_right[i:i+1] = commanded_right[i:i+1] + torch.clamp(right_standby_joints[i:i+1] - commanded_right[i:i+1], min=-0.04, max=0.04)
                     left_gripper_cmd[i, 0] = 1.0
                     # Move left arm up and retreat
                     tgt_up = target_pos.clone()
@@ -806,7 +806,7 @@ def main():
             delta_r_pose = torch.cat([delta_r_pos, delta_r_rot], dim=-1)
             if torch.norm(delta_r_pose) > 1e-5:
                 j_r_wrist = jacobians[:, jacobi_right_hand_idx, :6, :][:, :, jacobi_right_joint_ids]
-                j_r_tcp = get_tcp_jacobian(j_r_wrist, wrist_pos_r, tcp_pos_r)
+                j_r_tcp = get_tcp_jacobian(j_r_wrist, wrist_pos_r_all, tcp_pos_r_all)
                 dq_r = solve_pose_dls_ik(
                     j_r_tcp,
                     delta_r_pose,
@@ -827,7 +827,7 @@ def main():
             delta_l_pose = torch.cat([delta_l_pos, delta_l_rot], dim=-1)
             if torch.norm(delta_l_pose) > 1e-5:
                 j_l_wrist = jacobians[:, jacobi_left_hand_idx, :6, :][:, :, jacobi_left_joint_ids]
-                j_l_tcp = get_tcp_jacobian(j_l_wrist, wrist_pos_l, tcp_pos_l)
+                j_l_tcp = get_tcp_jacobian(j_l_wrist, wrist_pos_l_all, tcp_pos_l_all)
                 
                 # Dynamic task-space relaxation: Free the wrist orientation during flight to maximize reach
                 j_l_tcp = j_l_tcp.clone()
