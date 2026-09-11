@@ -46,6 +46,7 @@ parser.add_argument(
     help="Path to output HDF5 dataset.",
 )
 parser.add_argument("--max_steps_per_ep", type=int, default=700, help="Max steps before episode timeout.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel environments to run.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
