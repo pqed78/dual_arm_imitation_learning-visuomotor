@@ -420,6 +420,7 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 > /home/optimus/isaac_lab/dual_arm_il_visuo/
 > ├── README.md
 > ├── requirements.txt
+> ├── run_pipeline.sh
 > ├── configs/
 > │   ├── env_cfg.py
 > │   ├── bc_cfg.yaml
@@ -437,9 +438,11 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 > │   └── act/
 > ├── scripts/
 > │   ├── generate_scripted_demos.py
+> │   ├── generate_scripted_demos_parallel.py
 > │   ├── replay_demos.py
 > │   ├── train.py
-> │   └── eval.py
+> │   ├── eval.py
+> │   └── eval_parallel.py
 > └── data/
 > ```
 > 
@@ -474,9 +477,10 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 >    - `dataset/il_dataset.py`: HDF5 파일에서 `obs`, `actions`만 메모리에 올리고 `images`는 `self.get_h5_file()`를 통해 `__getitem__`에서 지연 로딩. 이미지 텐서는 `(C, H, W)` 형태로 0~1 사이 float32 정규화.
 >    - `models/vision_encoder.py`: `torchvision.models`를 활용하여 `resnet18`, `resnet50`, `vit_b_16` 등의 백본을 불러오고, 마지막 FC 레이어를 제거하여 1D Feature Vector를 반환하는 `VisionEncoder` 클래스 구현.
 >    - `scripts/train.py`: `build_model()` 함수로 BC/Diffusion/ACT 모델 인스턴스화. `argparse`에 `--num_workers` (기본값 16) 인자를 추가하여 `DataLoader`에 전달하고 `pin_memory=True`, `persistent_workers=True`를 설정해 디스크 I/O 병목을 해결. `AdamW` 옵티마이저와 `CosineAnnealingLR` 스케줄러 사용. 에포크마다 TensorBoard에 기록하고 `best_model.pt` 저장.
->    - `scripts/eval.py`: `gym.make("Isaac-Dual-Arm-IL-v0")` 호출 전 반드시 `gym.register`로 로컬 `DualArmILEnvCfg` 강제 매핑. 모델 로드 후 시뮬레이션 환경에서 루프를 돌며 평가.
+>    - `scripts/eval.py` & `eval_parallel.py`: `gym.make("Isaac-Dual-Arm-IL-v0")` 호출 전 반드시 `gym.register`로 로컬 `DualArmILEnvCfg` 강제 매핑. 모델 로드 후 시뮬레이션 환경에서 루프를 돌며 평가. 병렬 평가는 `img_queue`를 이용하여 다중 환경 시각 처리 수행.
 >    - `teleop/collect_demos.py`: 키보드 이벤트를 받아 로봇을 제어하고, 에피소드 성공(Y) 시 현재까지의 `obs`, `actions`, `images`를 버퍼에서 HDF5로 `demo_0`, `demo_1` 그룹으로 Append.
->    - `scripts/generate_scripted_demos.py`: Isaac Lab의 `DifferentialInverseKinematics`를 활용하여, 타겟 큐브의 위치를 파악한 뒤 양팔이 부드럽게 Pick & Place 궤적을 그리도록 Waypoint를 생성하고 HDF5에 자동 저장.
+>    - `scripts/generate_scripted_demos_parallel.py`: Isaac Lab의 `DifferentialInverseKinematics`를 활용하여 다중 환경에서 병렬로 Pick & Place 궤적을 고속 생성하고 HDF5에 자동 저장.
+>    - `run_pipeline.sh`: 데이터 수집(`generate_scripted_demos_parallel.py`), 학습(`train.py`), 병렬 평가(`eval_parallel.py`)를 논스톱으로 수행하는 자동화 스크립트.
 > 10. **코드 100% 완벽 복제 지침 (`setup_project.sh` 또는 `project_codebase.md`)**:
 >     각 파일의 로직을 스스로 처음부터 다시 구현할 필요 없이, 프로젝트에 동봉된 `setup_project.sh` 스크립트를 실행하거나 `project_codebase.md` 파일을 읽어줘. 이 파일들 안에는 3,400줄에 달하는 모든 핵심 코드들이 하드코딩 되어 있어서, 스크립트를 실행하거나 마크다운의 코드 블록을 그대로 파싱하여 저장하면 100% 동일하게 에러 없이 자동 생성될 거야. 
 > **[복사할 프롬프트 끝]**

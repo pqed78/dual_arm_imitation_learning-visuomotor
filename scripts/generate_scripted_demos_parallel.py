@@ -454,8 +454,9 @@ def main():
 
                 # Fail-fast: If baton drops during mid-air phases[i]s (Handover to Hover Target), abort episode
                 if 5 <= phases[i] <= 11 and obj_pos[0, 2].item() < 0.05:
-                    print(f"  [X] Dropped baton in mid-air at phases[i] {PHASE_NAMES[phases[i]]}! Discarding episode...")
-                    break
+                    print(f"  [X] Env {i} Dropped baton in mid-air at phase {PHASE_NAMES[phases[i]]}! Discarding episode...")
+                    phases[i] = PHASE_DONE
+                    continue
 
                 # Franka Wrist and TCP Poses
 
