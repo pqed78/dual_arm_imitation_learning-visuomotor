@@ -71,7 +71,7 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
         spawn=sim_utils.PinholeCameraCfg(
             focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955
         ),
-        offset=CameraCfg.OffsetCfg(pos=(1.2, 0.0, 1.0), rot=(0.5, 0.5, 0.5, 0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(1.2, 0.0, 1.0), rot=(-0.2805, 0.6491, 0.6491, -0.2805), convention="ros"),
     )
 
 @configclass
