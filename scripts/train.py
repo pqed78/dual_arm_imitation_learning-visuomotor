@@ -200,6 +200,11 @@ def main():
     val_size = max(1, int(0.1 * len(full_dataset)))
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    
+    # Enable Data Augmentation for training dataset only
+    val_dataset.dataset = copy.copy(full_dataset)
+    val_dataset.dataset.is_train = False
+    train_dataset.dataset.is_train = True
 
     # Optimize DataLoader for lazy HDF5 loading
     num_workers = args.num_workers
