@@ -70,7 +70,7 @@ Before running any scripts, you must activate the Isaac Lab virtual environment 
 source ~/isaac_lab/bin/activate
 ```
 
-### ① Step 1: Demo Data Collection (Choose 1 of 2 methods)
+### ① Step 1: Demo Data Collection (Choose 1 of 3 methods)
 
 #### [Method A] Script-based Single Demo Auto-generator (`generate_scripted_demos.py`)
 Generates perfect, high-quality demos sequentially using a single robot when debugging or visual confirmation is needed. (Wait time optimization patch applied)
@@ -80,7 +80,15 @@ Generates perfect, high-quality demos sequentially using a single robot when deb
 python scripts/generate_scripted_demos.py --num_demos=50
 ```
 
-#### [Method B] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
+#### [Method B] Script-based Parallel Demo Auto-generator (`generate_scripted_demos_parallel.py`)
+Collects high-quality demos in parallel using multiple environments simultaneously for significantly faster data collection.
+
+```bash
+# Auto-collect 100 demos in parallel using 16 environments without GUI (Headless)
+python scripts/generate_scripted_demos_parallel.py --num_demos=100 --num_envs=16 --headless
+```
+
+#### [Method C] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
 Launches the Isaac Sim GUI and allows manual recording of successful episodes by controlling the robot directly with a keyboard.
 
 ```bash
@@ -273,7 +281,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 source ~/isaac_lab/bin/activate
 ```
 
-### ① 1단계: 데모 데이터 수집 (2가지 방법 중 선택)
+### ① 1단계: 데모 데이터 수집 (3가지 방법 중 선택)
 
 #### [방법 A] 스크립트 기반 단일 데모 자동 생성기 (`generate_scripted_demos.py`)
 디버깅이나 시각적 확인이 필요할 때 1대의 로봇이 순차적으로 완벽한 고품질 데모를 생성합니다. (대기 시간 최적화 패치 적용 완료)
@@ -283,7 +291,15 @@ source ~/isaac_lab/bin/activate
 python scripts/generate_scripted_demos.py --num_demos=50
 ```
 
-#### [방법 B] 키보드 텔레오퍼레이션 수동 수집 (`collect_demos.py`)
+#### [방법 B] 스크립트 기반 병렬 데모 자동 생성기 (`generate_scripted_demos_parallel.py`)
+다수의 환경을 동시에 실행하여 고품질 데모 데이터를 초고속으로 병렬 수집합니다. 
+
+```bash
+# 16개의 환경을 GUI 없이(Headless) 동시 실행하여 100개의 데모 초고속 병렬 수집
+python scripts/generate_scripted_demos_parallel.py --num_demos=100 --num_envs=16 --headless
+```
+
+#### [방법 C] 키보드 텔레오퍼레이션 수동 수집 (`collect_demos.py`)
 Isaac Sim GUI를 띄우고 직접 키보드로 조작하여 성공 에피소드를 수동 녹화합니다.
 
 ```bash
