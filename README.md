@@ -145,18 +145,25 @@ python scripts/train.py --algo=act --epochs=150
 
 ---
 
-### ④ Step 4: Isaac Sim Simulation Evaluation (`eval.py`)
+### ④ Step 4: Isaac Sim Simulation Evaluation (Choose 1 of 2 methods)
+
+#### [Method A] Sequential Evaluation (`eval.py`)
 Connects the trained model to the simulation robot to measure the actual closed-loop success rate based on visual input.
 
 ```bash
-# Evaluate Diffusion Policy
+# Evaluate Diffusion Policy sequentially
 python scripts/eval.py --algo=diffusion --num_episodes=10
 
 # Evaluate ACT (Temporal Ensembling applied)
 python scripts/eval.py --algo=act --num_episodes=10
+```
 
-# Evaluate Behavior Cloning
-python scripts/eval.py --algo=bc --num_episodes=10
+#### [Method B] Parallel Evaluation (`eval_parallel.py`)
+Significantly accelerates large-scale evaluation (e.g. 100 episodes) by launching multiple Isaac Sim environments and batching visual policy inferences.
+
+```bash
+# Evaluate 100 episodes in parallel using 16 headless environments
+python scripts/eval_parallel.py --algo=diffusion --num_episodes=100 --num_envs=16 --headless
 ```
 
 ---
@@ -359,18 +366,25 @@ python scripts/train.py --algo=act --epochs=150
 
 ---
 
-### ④ 4단계: Isaac Sim 시뮬레이션 평가 (`eval.py`)
-학습된 모델을 시뮬레이션 로봇에 연결하여 실제 클로즈드 루프 성공률을 측정합니다. 모델은 제공되는 카메라 영상과 로봇 관절 상태만으로 예측을 수행합니다.
+### ④ 4단계: Isaac Sim 시뮬레이션 평가 (2가지 방법 중 선택)
+
+#### [방법 A] 순차 평가 (`eval.py`)
+학습된 모델을 시뮬레이션 로봇에 1대1로 연결하여 실제 클로즈드 루프 성공률을 측정합니다. 모델은 제공되는 카메라 영상과 로봇 관절 상태만으로 예측을 수행합니다.
 
 ```bash
-# Diffusion Policy 평가
+# Diffusion Policy 순차 평가
 python scripts/eval.py --algo=diffusion --num_episodes=10
 
 # ACT 평가 (Temporal Ensembling 적용)
 python scripts/eval.py --algo=act --num_episodes=10
+```
 
-# Behavior Cloning 평가
-python scripts/eval.py --algo=bc --num_episodes=10
+#### [방법 B] 병렬 평가 (`eval_parallel.py`)
+다중 환경을 띄우고 이미지 처리 및 모델 추론(Inference)을 Batch 단위로 수행하여 대규모 에피소드(예: 100회) 평가 시간을 획기적으로 단축합니다.
+
+```bash
+# 16개의 환경을 GUI 없이(Headless) 동시 띄워 총 100 에피소드 초고속 병렬 평가
+python scripts/eval_parallel.py --algo=diffusion --num_episodes=100 --num_envs=16 --headless
 ```
 
 ---
