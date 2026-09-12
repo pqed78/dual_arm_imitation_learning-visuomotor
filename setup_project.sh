@@ -4803,6 +4803,7 @@ parser.add_argument(
     default=os.path.join(PROJECT_ROOT, "data", "demos.hdf5"),
     help="Path to HDF5 dataset file.",
 )
+parser.add_argument("--demo_idx", type=int, default=0, help="Starting index of demo to replay. Negative indices supported.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of demos to play simultaneously.")
 parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
 AppLauncher.add_app_launcher_args(parser)
@@ -4836,8 +4837,19 @@ def main():
             simulation_app.close()
             return
             
-        num_parallel = min(args_cli.num_envs, len(demo_keys))
-        target_demos = demo_keys[:num_parallel]
+        num_avail = len(demo_keys)
+        num_parallel = min(args_cli.num_envs, num_avail)
+        
+        if args_cli.demo_idx < 0:
+            # If negative (e.g. -1), pick the last num_parallel demos
+            start_idx = max(0, num_avail + args_cli.demo_idx - num_parallel + 1)
+        else:
+            start_idx = min(args_cli.demo_idx, num_avail - 1)
+            
+        end_idx = min(num_avail, start_idx + num_parallel)
+        target_demos = demo_keys[start_idx : end_idx]
+        num_parallel = len(target_demos)  # update to actual
+        
         print(f"[Kinematic Replay] Preparing to play {num_parallel} demos in parallel: {target_demos}")
 
         # Check if kinematic data is available
