@@ -58,7 +58,7 @@ def parse_args():
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument("--resume", type=str, default=None, help="Path to a checkpoint file to resume training from.")
-    parser.add_argument("--num_workers", type=int, default=16, help="Number of CPU workers for DataLoader.")
+    parser.add_argument("--num_workers", type=int, default=32, help="Number of CPU workers for DataLoader.")
     return parser.parse_args()
 
 
@@ -207,6 +207,13 @@ def main():
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)
     model.to(args.device)
     
+    # 3. Apply Torch Compile for 10-20% speedup on GPU
+    try:
+        model = torch.compile(model)
+        print("[Train] torch.compile() applied successfully for speedup.")
+    except Exception as e:
+        print(f"[Train] torch.compile() failed or not supported: {e}")
+
     if args.resume:
         if os.path.exists(args.resume):
             print(f"[Model] Resuming training from checkpoint: {args.resume}")

@@ -29,7 +29,7 @@ echo "✅ 데이터 수집 완료."
 
 # 3. 모델 학습
 echo -e "\n[2/3] 🧠 $ALGO 모델 학습 중 ($EPOCHS Epochs)..."
-eval $PYTHON_EXEC scripts/train.py --algo $ALGO --epochs $EPOCHS
+eval $PYTHON_EXEC scripts/train.py --algo $ALGO --epochs $EPOCHS --num_workers 32
 echo "✅ 학습 완료."
 
 # 4. 병렬 평가 (eval_parallel.py)
