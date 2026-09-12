@@ -73,7 +73,7 @@ cat << 'EOF_FILE' > configs/diffusion_cfg.yaml
 algo: "diffusion"
 
 # Horizon parameters
-pred_horizon: 16       # Number of future actions predicted by model (Tp)
+pred_horizon: 24       # Number of future actions predicted by model (Tp)
 obs_horizon: 2         # Number of historical observations conditioned on (To)
 act_horizon: 8         # Number of action steps executed before replanning (Ta)
 
@@ -2014,7 +2014,7 @@ def main():
                         img_tensor = torch.stack(list(img_queue), dim=0).permute(1, 0, 2, 3, 4)
                         
                         infer_steps = 15 # using fast inference
-                        pred_act_chunk = model.predict_action(obs_tensor, img_tensor, num_inference_steps=infer_steps, use_ddim=False)
+                        pred_act_chunk = model.predict_action(obs_tensor, img_tensor, num_inference_steps=infer_steps, use_ddim=True)
                         
                         for a_idx in range(min(act_horizon, pred_act_chunk.shape[1])):
                             act_unnorm = pred_act_chunk[:, a_idx, :] * act_std + act_mean

@@ -3,7 +3,7 @@
 algo: "diffusion"
 
 # Horizon parameters
-pred_horizon: 16       # Number of future actions predicted by model (Tp)
+pred_horizon: 24       # Number of future actions predicted by model (Tp)
 obs_horizon: 2         # Number of historical observations conditioned on (To)
 act_horizon: 8         # Number of action steps executed before replanning (Ta)
 
