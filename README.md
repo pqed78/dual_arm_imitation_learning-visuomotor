@@ -13,6 +13,7 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 /home/optimus/isaac_lab/dual_arm_il_visuo/
 ├── README.md                  # Project usage guide (This document)
 ├── requirements.txt           # Required Python libraries list
+├── run_pipeline.sh            # Automated pipeline script (Collect -> Train -> Eval)
 ├── configs/                   # Environment and model hyperparameters
 │   ├── env_cfg.py             # Teleop/IL custom Isaac Lab environment settings (Camera added, grasping tuned)
 │   ├── bc_cfg.yaml            # Behavior Cloning settings
@@ -29,10 +30,12 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
-│   ├── generate_scripted_demos.py  # [Recommended] Script-based high-quality single demo auto-generator
-│   ├── replay_demos.py        # Verify collected HDF5 demos via simulation replay
-│   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
-│   └── eval.py                # Policy rollout evaluation in Isaac Sim environment
+│   ├── generate_scripted_demos.py          # Script-based single demo auto-generator
+│   ├── generate_scripted_demos_parallel.py # [Recommended] Parallel high-speed demo auto-generator
+│   ├── replay_demos.py                     # Verify collected HDF5 demos via simulation replay
+│   ├── train.py                            # Integrated high-speed GPU training script for the 3 algorithms
+│   ├── eval.py                             # Sequential policy rollout evaluation in Isaac Sim
+│   └── eval_parallel.py                    # Parallel large-scale policy evaluation in Isaac Sim
 ├── data/                      # Directory for collected demo files (.hdf5)
 └── checkpoints/               # Directory for trained model checkpoints
 ```
@@ -231,6 +234,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 /home/optimus/isaac_lab/dual_arm_il_visuo/
 ├── README.md                  # 프로젝트 사용 가이드 (본 문서)
 ├── requirements.txt           # 필요한 파이썬 라이브러리 목록
+├── run_pipeline.sh            # 데이터수집-학습-평가 자동화 쉘 스크립트
 ├── configs/                   # 환경 및 모델 하이퍼파라미터
 │   ├── env_cfg.py             # 텔레옵/IL 맞춤형 Isaac Lab 환경 설정 (카메라 추가, 그라스핑 마찰력 튜닝)
 │   ├── bc_cfg.yaml            # Behavior Cloning 설정
@@ -247,10 +251,12 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 │   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # 실행 스크립트
-│   ├── generate_scripted_demos.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
-│   ├── replay_demos.py        # 수집된 HDF5 데모 시뮬레이션 재생 검증
-│   ├── train.py               # 3종 알고리즘 통합 고속 GPU 학습 스크립트
-│   └── eval.py                # Isaac Sim 환경에서 비전 기반 정책 롤아웃 평가
+│   ├── generate_scripted_demos.py          # 스크립트 기반 고품질 단일 데모 자동 생성기
+│   ├── generate_scripted_demos_parallel.py # [추천] 스크립트 기반 고품질 데모 병렬 고속 생성기
+│   ├── replay_demos.py                     # 수집된 HDF5 데모 시뮬레이션 재생 검증
+│   ├── train.py                            # 3종 알고리즘 통합 고속 GPU 학습 스크립트
+│   ├── eval.py                             # Isaac Sim 환경에서 비전 기반 정책 순차 평가
+│   └── eval_parallel.py                    # Isaac Sim 환경에서 비전 기반 정책 병렬 초고속 평가
 ├── data/                      # 수집된 데모 파일 (.hdf5) 저장 경로
 └── checkpoints/               # 훈련된 모델 체크포인트 저장 경로
 ```
