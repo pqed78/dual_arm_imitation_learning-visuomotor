@@ -112,8 +112,16 @@ def main():
     # -------------------------------------------------------------
     env_cfg.viewer.resolution = (1920, 1080)
     if args_cli.num_envs > 1:
-        env_cfg.viewer.eye = (2.5 + args_cli.num_envs * 0.2, 0.0, 2.0 + args_cli.num_envs * 0.1)
-        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+        import math
+        # Isaac Lab arranges environments in a 2D grid
+        n_cols = math.ceil(math.sqrt(args_cli.num_envs))
+        env_spacing = env_cfg.scene.env_spacing
+        cx = (n_cols - 1) * env_spacing / 2.0
+        cy = (n_cols - 1) * env_spacing / 2.0
+        
+        # Pull the camera back and up to capture all parallel environments in the grid
+        env_cfg.viewer.eye = (cx + 3.0 + n_cols * 1.5, cy, 2.0 + n_cols * 1.5)
+        env_cfg.viewer.lookat = (cx, cy, 0.5)
     print("[Eval] Initializing Isaac Lab Environment...")
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
 
