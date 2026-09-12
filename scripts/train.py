@@ -227,6 +227,9 @@ def main():
     # Optimizer & Scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+    
+    # PyTorch AMP Scaler
+    scaler = torch.cuda.amp.GradScaler()
 
     best_val_loss = float("inf")
     global_step = 0
@@ -242,11 +245,15 @@ def main():
             batch = {k: v.to(args.device) for k, v in batch.items()}
 
             optimizer.zero_grad()
-            loss_dict = model.compute_loss(batch)
-            loss = loss_dict["loss"]
-            loss.backward()
+            with torch.cuda.amp.autocast():
+                loss_dict = model.compute_loss(batch)
+                loss = loss_dict["loss"]
+            
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
 
             train_loss_sum += loss.item()
             num_train_batches += 1
@@ -266,7 +273,8 @@ def main():
         with torch.no_grad():
             for batch in val_loader:
                 batch = {k: v.to(args.device) for k, v in batch.items()}
-                loss_dict = model.compute_loss(batch)
+                with torch.cuda.amp.autocast():
+                    loss_dict = model.compute_loss(batch)
                 val_loss_sum += loss_dict["loss"].item()
                 num_val_batches += 1
 
