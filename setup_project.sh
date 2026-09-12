@@ -1765,6 +1765,8 @@ import os
 import sys
 import math
 import torch
+import cv2
+import numpy as np
 
 from isaaclab.app import AppLauncher
 
@@ -1897,6 +1899,7 @@ def main():
 
     total_success = 0
     total_evaluated = 0
+    video_out = None
 
     for batch_idx in range(num_batches):
         print(f"\n=== Batch {batch_idx + 1}/{num_batches} ===")
@@ -1922,6 +1925,27 @@ def main():
 
             # Extract image (num_envs, H, W, C) -> (num_envs, C, H, W)
             raw_img = obs["image"]["rgb"].to(device)
+            
+            # --- Record front_camera video ---
+            rgb_np = raw_img.clone().detach().cpu().numpy()
+            if rgb_np.dtype != np.uint8:
+                if rgb_np.max() <= 1.0:
+                    rgb_np = (rgb_np * 255.0)
+                rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
+            grid_img = np.concatenate(rgb_np, axis=1)
+            
+            if grid_img.shape[-1] == 3:
+                grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR)
+            elif grid_img.shape[-1] == 4:
+                grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
+                
+            if video_out is None:
+                h, w = grid_img.shape[:2]
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                video_out = cv2.VideoWriter(os.path.join(save_dir, 'eval_front_camera.mp4'), fourcc, 30.0, (w, h))
+            video_out.write(grid_img)
+            # ---------------------------------
+            
             img_obs = raw_img.float()
             if img_obs.max() > 1.0:
                 img_obs = img_obs / 255.0
@@ -2015,6 +2039,10 @@ def main():
     print(f" Successes      : {total_success}")
     print(f" Success Rate   : {success_rate:.1f}%")
     print("=" * 60)
+
+    if video_out is not None:
+        video_out.release()
+        print(f"Saved evaluation front camera video to {os.path.join(save_dir, 'eval_front_camera.mp4')}")
 
     env.close()
     simulation_app.close()
