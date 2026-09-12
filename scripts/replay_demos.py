@@ -214,8 +214,15 @@ def main():
                         rgb_np = (rgb_np * 255.0)
                     rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
                 
-                # Stack images horizontally
-                grid_img = np.concatenate(rgb_np[:num_parallel], axis=1)
+                # Create a 2D grid instead of a 1D strip to prevent video player cropping
+                n_imgs = num_parallel
+                n_cols = math.ceil(math.sqrt(n_imgs))
+                n_rows = math.ceil(n_imgs / n_cols)
+                h_img, w_img, c_img = rgb_np[0].shape
+                grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
+                for i in range(num_parallel):
+                    row, col = divmod(i, n_cols)
+                    grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = rgb_np[i]
                 
                 # Add camera position text to the first image
                 cam_pos = env.scene["front_camera"].data.pos_w[0].cpu().numpy()
