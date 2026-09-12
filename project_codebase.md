@@ -280,6 +280,8 @@ import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torchvision.transforms.functional as TF
+import random
 
 
 class DualArmDataset(Dataset):
@@ -293,6 +295,7 @@ class DualArmDataset(Dataset):
         obs_horizon: int = 2,
         stats: dict | None = None,
         normalize: bool = True,
+        is_train: bool = False,
     ):
         """Initialize the dataset.
 
@@ -303,6 +306,7 @@ class DualArmDataset(Dataset):
             obs_horizon: Past observation sequence length (for diffusion).
             stats: Precomputed normalization stats (dict with 'obs_mean', 'obs_std', etc.).
             normalize: Whether to normalize obs and actions to zero mean / unit var.
+            is_train: Whether to apply data augmentation (RandomCrop, ColorJitter).
         """
         super().__init__()
         self.dataset_path = dataset_path
@@ -310,6 +314,7 @@ class DualArmDataset(Dataset):
         self.pred_horizon = pred_horizon
         self.obs_horizon = obs_horizon
         self.normalize = normalize
+        self.is_train = is_train
 
         if not os.path.exists(dataset_path):
             raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
@@ -425,14 +430,44 @@ class DualArmDataset(Dataset):
 
         def preprocess_image(img_arr):
             # img_arr is (..., H, W, C) uint8
-            # Convert to float32 [0, 1] and (..., C, H, W)
             if img_arr.ndim == 3: # single image (H, W, C)
                 img_t = torch.from_numpy(img_arr).float() / 255.0
-                return img_t.permute(2, 0, 1)
+                img_t = img_t.permute(2, 0, 1).unsqueeze(0) # (1, C, H, W)
             elif img_arr.ndim == 4: # sequence of images (T, H, W, C)
                 img_t = torch.from_numpy(img_arr).float() / 255.0
-                return img_t.permute(0, 3, 1, 2)
-            return img_arr
+                img_t = img_t.permute(0, 3, 1, 2) # (T, C, H, W)
+            else:
+                return img_arr
+            
+            T, C, H, W = img_t.shape
+            
+            if self.is_train:
+                # 1. Color Jitter (apply same jitter to all frames in T)
+                if random.random() < 0.8:
+                    b_f = random.uniform(0.8, 1.2)
+                    c_f = random.uniform(0.8, 1.2)
+                    s_f = random.uniform(0.8, 1.2)
+                    h_f = random.uniform(-0.05, 0.05)
+                    
+                    # Apply iteratively to preserve T safely
+                    jittered = []
+                    for i in range(T):
+                        f = img_t[i]
+                        f = TF.adjust_brightness(f, b_f)
+                        f = TF.adjust_contrast(f, c_f)
+                        f = TF.adjust_saturation(f, s_f)
+                        f = TF.adjust_hue(f, h_f)
+                        jittered.append(f)
+                    img_t = torch.stack(jittered, dim=0)
+
+                # 2. Random Crop (apply same crop to all frames in T)
+                pad = 4
+                img_t = TF.pad(img_t, [pad, pad, pad, pad], padding_mode='edge')
+                top = random.randint(0, pad * 2)
+                left = random.randint(0, pad * 2)
+                img_t = TF.crop(img_t, top, left, H, W)
+                
+            return img_t.squeeze(0) if img_arr.ndim == 3 else img_t
 
         if self.algo == "bc":
             # Standard single-step Behavior Cloning
@@ -5178,6 +5213,26 @@ if PROJECT_ROOT not in sys.path:
 
 from dataset.il_dataset import DualArmDataset
 from models import MLPBCPolicy, RNNBCPolicy, DiffusionPolicy, ACTPolicy
+import copy
+
+class EMAModel:
+    def __init__(self, model, decay=0.9999):
+        self.model = model
+        self.decay = decay
+        self.shadow = {}
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone()
+                
+    def step(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = self.decay * self.shadow[name] + (1.0 - self.decay) * param.data
+                
+    def copy_to(self, target_model):
+        for name, param in target_model.named_parameters():
+            if param.requires_grad:
+                param.data.copy_(self.shadow[name])
 
 
 def parse_args():
@@ -5379,6 +5434,9 @@ def main():
     
     # PyTorch AMP Scaler
     scaler = torch.cuda.amp.GradScaler()
+    
+    # Initialize EMA
+    ema = EMAModel(model)
 
     best_val_loss = float("inf")
     global_step = 0
@@ -5403,6 +5461,9 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
+            
+            # Step EMA
+            ema.step()
 
             train_loss_sum += loss.item()
             num_train_batches += 1
@@ -5415,30 +5476,38 @@ def main():
         scheduler.step()
         avg_train_loss = train_loss_sum / max(1, num_train_batches)
 
-        # Validation
-        model.eval()
+        # Validation (using EMA model)
+        # Create a temporary model copy for EMA validation
+        ema_val_model = copy.deepcopy(model)
+        ema.copy_to(ema_val_model)
+        ema_val_model.eval()
+        
         val_loss_sum = 0.0
         num_val_batches = 0
         with torch.no_grad():
             for batch in val_loader:
                 batch = {k: v.to(args.device) for k, v in batch.items()}
                 with torch.cuda.amp.autocast():
-                    loss_dict = model.compute_loss(batch)
+                    loss_dict = ema_val_model.compute_loss(batch)
                 val_loss_sum += loss_dict["loss"].item()
                 num_val_batches += 1
 
         avg_val_loss = val_loss_sum / max(1, num_val_batches)
-        print(f"Epoch {epoch:3d} | Train Loss: {avg_train_loss:.5f} | Val Loss: {avg_val_loss:.5f}")
+        print(f"Epoch {epoch:3d} | Train Loss: {avg_train_loss:.5f} | EMA Val Loss: {avg_val_loss:.5f}")
 
         # Log epoch-wise metrics to TensorBoard
         writer.add_scalar("Loss/Train_Epoch", avg_train_loss, epoch)
         writer.add_scalar("Loss/Val_Epoch", avg_val_loss, epoch)
         writer.add_scalar("LR", scheduler.get_last_lr()[0], epoch)
 
-        # Save Best Checkpoint
+        # Save Best Checkpoint (Save EMA weights)
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_ckpt_path = os.path.join(save_dir, "best_model.pt")
+            
+            # Uncompile before saving if using torch.compile
+            save_model = ema_val_model._orig_mod if hasattr(ema_val_model, "_orig_mod") else ema_val_model
+            
             torch.save(
                 {
                     "epoch": epoch,
@@ -5446,7 +5515,7 @@ def main():
                     "config": cfg,
                     "obs_dim": full_dataset.obs_dim,
                     "act_dim": full_dataset.act_dim,
-                    "model_state_dict": model.state_dict(),
+                    "model_state_dict": save_model.state_dict(),
                     "val_loss": best_val_loss,
                 },
                 best_ckpt_path,
