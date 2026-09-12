@@ -106,6 +106,14 @@ def main():
     env_cfg.observations = VisuomotorObsCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
+
+    # -------------------------------------------------------------
+    # Viewer & Recording Setup (Fixing Cropped FOV)
+    # -------------------------------------------------------------
+    env_cfg.viewer.resolution = (1920, 1080)
+    if args_cli.num_envs > 1:
+        env_cfg.viewer.eye = (2.5 + args_cli.num_envs * 0.2, 0.0, 2.0 + args_cli.num_envs * 0.1)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
     print("[Eval] Initializing Isaac Lab Environment...")
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
 

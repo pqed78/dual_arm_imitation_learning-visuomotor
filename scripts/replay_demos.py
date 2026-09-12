@@ -120,6 +120,15 @@ def main():
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
     
+    # -------------------------------------------------------------
+    # Viewer & Recording Setup (Fixing Cropped FOV)
+    # -------------------------------------------------------------
+    env_cfg.viewer.resolution = (1920, 1080)
+    if num_parallel > 1:
+        # Pull the camera back and up to capture all parallel environments
+        env_cfg.viewer.eye = (2.5 + num_parallel * 0.2, 0.0, 2.0 + num_parallel * 0.1)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+    
     # FOR KINEMATIC REPLAY: Disable physics on the object so it doesn't fall or get pushed
     if hasattr(env_cfg.scene, "object") and hasattr(env_cfg.scene.object, "spawn"):
         from isaaclab.sim import RigidBodyPropertiesCfg

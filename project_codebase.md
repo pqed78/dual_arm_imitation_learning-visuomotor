@@ -1904,6 +1904,14 @@ def main():
     env_cfg.observations = VisuomotorObsCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
+
+    # -------------------------------------------------------------
+    # Viewer & Recording Setup (Fixing Cropped FOV)
+    # -------------------------------------------------------------
+    env_cfg.viewer.resolution = (1920, 1080)
+    if args_cli.num_envs > 1:
+        env_cfg.viewer.eye = (2.5 + args_cli.num_envs * 0.2, 0.0, 2.0 + args_cli.num_envs * 0.1)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
     print("[Eval] Initializing Isaac Lab Environment...")
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
 
@@ -4936,6 +4944,15 @@ def main():
 
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
+    
+    # -------------------------------------------------------------
+    # Viewer & Recording Setup (Fixing Cropped FOV)
+    # -------------------------------------------------------------
+    env_cfg.viewer.resolution = (1920, 1080)
+    if num_parallel > 1:
+        # Pull the camera back and up to capture all parallel environments
+        env_cfg.viewer.eye = (2.5 + num_parallel * 0.2, 0.0, 2.0 + num_parallel * 0.1)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
     
     # FOR KINEMATIC REPLAY: Disable physics on the object so it doesn't fall or get pushed
     if hasattr(env_cfg.scene, "object") and hasattr(env_cfg.scene.object, "spawn"):
