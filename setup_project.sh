@@ -1767,6 +1767,7 @@ import math
 import torch
 import cv2
 import numpy as np
+import json
 
 from isaaclab.app import AppLauncher
 
@@ -2048,6 +2049,20 @@ def main():
     print(f" Successes      : {total_success}")
     print(f" Success Rate   : {success_rate:.1f}%")
     print("=" * 60)
+
+    results_dict = {
+        "algo": algo,
+        "checkpoint": ckpt_path,
+        "total_evaluated": total_evaluated,
+        "successes": total_success,
+        "success_rate_percent": success_rate,
+        "max_steps_per_ep": args_cli.max_steps_per_ep
+    }
+    
+    results_path = os.path.join(save_dir, "eval_results.json")
+    with open(results_path, "w") as f:
+        json.dump(results_dict, f, indent=4)
+    print(f"Saved evaluation results to {results_path}")
 
     if video_out is not None:
         video_out.release()
