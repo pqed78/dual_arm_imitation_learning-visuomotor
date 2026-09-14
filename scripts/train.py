@@ -231,23 +231,17 @@ def main():
     # Instantiate Model
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)
     model.to(args.device)
-    
-    # 3. Apply Torch Compile for 10-20% speedup on GPU
-    try:
-        model = torch.compile(model)
-        print("[Train] torch.compile() applied successfully for speedup.")
-    except Exception as e:
-        print(f"[Train] torch.compile() failed or not supported: {e}")
+    raw_model = model  # Keep reference to raw model for deepcopy, EMA, and saving
 
-    # Optimizer & Scheduler
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    # Optimizer & Scheduler (Use raw_model)
+    optimizer = torch.optim.AdamW(raw_model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
     
     # PyTorch AMP Scaler
     scaler = torch.cuda.amp.GradScaler()
     
-    # Initialize EMA
-    ema = EMAModel(model)
+    # Initialize EMA (Use raw_model)
+    ema = EMAModel(raw_model)
 
     start_epoch = 1
     best_val_loss = float("inf")
@@ -259,7 +253,7 @@ def main():
             checkpoint = torch.load(args.resume, map_location=args.device, weights_only=False)
             
             if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-                model.load_state_dict(checkpoint["model_state_dict"])
+                raw_model.load_state_dict(checkpoint["model_state_dict"])
                 if "optimizer_state_dict" in checkpoint:
                     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
                 if "scheduler_state_dict" in checkpoint:
@@ -267,19 +261,31 @@ def main():
                 if "scaler_state_dict" in checkpoint:
                     scaler.load_state_dict(checkpoint["scaler_state_dict"])
                 if "ema_shadow" in checkpoint:
-                    ema.shadow = checkpoint["ema_shadow"]
+                    # Clean _orig_mod. prefix from keys if they were accidentally saved with them
+                    cleaned_shadow = {}
+                    for k, v in checkpoint["ema_shadow"].items():
+                        clean_k = k.replace("_orig_mod.", "")
+                        cleaned_shadow[clean_k] = v
+                    ema.shadow = cleaned_shadow
                 if "epoch" in checkpoint:
                     start_epoch = checkpoint["epoch"] + 1
                 if "val_loss" in checkpoint:
                     best_val_loss = checkpoint["val_loss"]
                 print(f"  --> Resumed from epoch {start_epoch - 1}, best_val_loss {best_val_loss:.5f}")
             else:
-                model.load_state_dict(checkpoint)
+                raw_model.load_state_dict(checkpoint)
                 print(f"  --> Resumed raw weights only.")
         else:
             print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
 
-    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # Apply Torch Compile for 10-20% speedup on GPU AFTER loading weights
+    try:
+        model = torch.compile(raw_model)
+        print("[Train] torch.compile() applied successfully for speedup.")
+    except Exception as e:
+        print(f"[Train] torch.compile() failed or not supported: {e}")
+
+    total_params = sum(p.numel() for p in raw_model.parameters() if p.requires_grad)
     print(f"[Model] {args.algo.upper()} created with {total_params:,} trainable parameters.")
 
     # Training Loop
@@ -319,7 +325,7 @@ def main():
 
         # Validation (using EMA model)
         # Create a temporary model copy for EMA validation
-        ema_val_model = copy.deepcopy(model)
+        ema_val_model = copy.deepcopy(raw_model)
         ema.copy_to(ema_val_model)
         ema_val_model.eval()
         
@@ -342,14 +348,13 @@ def main():
         writer.add_scalar("LR", scheduler.get_last_lr()[0], epoch)
 
         # Prepare Checkpoint Dictionary
-        save_model = ema_val_model._orig_mod if hasattr(ema_val_model, "_orig_mod") else ema_val_model
         checkpoint_dict = {
             "epoch": epoch,
             "algo": args.algo,
             "config": cfg,
             "obs_dim": full_dataset.obs_dim,
             "act_dim": full_dataset.act_dim,
-            "model_state_dict": save_model.state_dict(),
+            "model_state_dict": ema_val_model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "scaler_state_dict": scaler.state_dict(),
