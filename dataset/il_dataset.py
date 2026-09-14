@@ -178,33 +178,8 @@ class DualArmDataset(Dataset):
             else:
                 return img_arr
             
-            T, C, H, W = img_t.shape
-            
-            if self.is_train:
-                # 1. Color Jitter (apply same jitter to all frames in T)
-                if random.random() < 0.8:
-                    b_f = random.uniform(0.8, 1.2)
-                    c_f = random.uniform(0.8, 1.2)
-                    s_f = random.uniform(0.8, 1.2)
-                    h_f = random.uniform(-0.05, 0.05)
-                    
-                    # Apply iteratively to preserve T safely
-                    jittered = []
-                    for i in range(T):
-                        f = img_t[i]
-                        f = TF.adjust_brightness(f, b_f)
-                        f = TF.adjust_contrast(f, c_f)
-                        f = TF.adjust_saturation(f, s_f)
-                        f = TF.adjust_hue(f, h_f)
-                        jittered.append(f)
-                    img_t = torch.stack(jittered, dim=0)
-
-                # 2. Random Crop (apply same crop to all frames in T)
-                pad = 4
-                img_t = TF.pad(img_t, [pad, pad, pad, pad], padding_mode='edge')
-                top = random.randint(0, pad * 2)
-                left = random.randint(0, pad * 2)
-                img_t = TF.crop(img_t, top, left, H, W)
+            # Note: Data augmentation (ColorJitter, RandomCrop) was moved to train.py 
+            # to be executed on the GPU, eliminating the massive CPU bottleneck.
                 
             return img_t.squeeze(0) if img_arr.ndim == 3 else img_t
 

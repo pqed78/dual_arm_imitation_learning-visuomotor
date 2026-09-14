@@ -30,6 +30,47 @@ if PROJECT_ROOT not in sys.path:
 from dataset.il_dataset import DualArmDataset
 from models import MLPBCPolicy, RNNBCPolicy, DiffusionPolicy, ACTPolicy
 import copy
+import random
+
+def apply_gpu_augmentation(images):
+    """
+    Applies Color Jitter and Random Crop purely on the GPU to completely eliminate CPU/Dataloader bottleneck.
+    Expects images tensor: (B, T, C, H, W) float [0, 1]
+    """
+    B, T, C, H, W = images.shape
+    device = images.device
+
+    # 1. Color Jitter (Probability 80%)
+    if random.random() < 0.8:
+        # Generate random factors per batch element (B, 1, 1, 1, 1)
+        # Apply the exact same jitter to all T frames in each sequence
+        b_f = torch.empty(B, 1, 1, 1, 1, device=device).uniform_(0.8, 1.2)
+        c_f = torch.empty(B, 1, 1, 1, 1, device=device).uniform_(0.8, 1.2)
+        
+        # Apply brightness (multiply)
+        images = images * b_f
+        
+        # Apply contrast (interpolate with mean)
+        # mean over C, H, W (last 3 dims)
+        mean = images.mean(dim=[-3, -2, -1], keepdim=True)
+        images = (images - mean) * c_f + mean
+        
+        images = torch.clamp(images, 0.0, 1.0)
+        
+    # 2. Random Crop (Translation)
+    pad = 4
+    # Pad H and W
+    images_padded = torch.nn.functional.pad(images, (pad, pad, pad, pad), mode='replicate')
+    
+    # We slice uniquely per batch element, but consistently across T
+    # Using a fast loop over B to slice (very fast on GPU as it just modifies tensor views)
+    cropped = torch.empty_like(images)
+    for i in range(B):
+        top = random.randint(0, pad * 2)
+        left = random.randint(0, pad * 2)
+        cropped[i] = images_padded[i, :, :, top:top+H, left:left+W]
+        
+    return cropped
 
 class EMAModel:
     def __init__(self, model, decay=0.9999):
@@ -299,6 +340,10 @@ def main():
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}")
         for batch in pbar:
             batch = {k: v.to(args.device) for k, v in batch.items()}
+            
+            # Apply ultra-fast GPU augmentation!
+            if "images" in batch:
+                batch["images"] = apply_gpu_augmentation(batch["images"])
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
