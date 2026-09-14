@@ -170,10 +170,10 @@ class DualArmDataset(Dataset):
         def preprocess_image(img_arr):
             # img_arr is (..., H, W, C) uint8
             if img_arr.ndim == 3: # single image (H, W, C)
-                img_t = torch.from_numpy(img_arr).float() / 255.0
+                img_t = torch.from_numpy(img_arr)
                 img_t = img_t.permute(2, 0, 1).unsqueeze(0) # (1, C, H, W)
             elif img_arr.ndim == 4: # sequence of images (T, H, W, C)
-                img_t = torch.from_numpy(img_arr).float() / 255.0
+                img_t = torch.from_numpy(img_arr)
                 img_t = img_t.permute(0, 3, 1, 2) # (T, C, H, W)
             else:
                 return img_arr
