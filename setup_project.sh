@@ -5376,16 +5376,6 @@ def main():
     except Exception as e:
         print(f"[Train] torch.compile() failed or not supported: {e}")
 
-    if args.resume:
-        if os.path.exists(args.resume):
-            print(f"[Model] Resuming training from checkpoint: {args.resume}")
-            model.load_state_dict(torch.load(args.resume, map_location=args.device, weights_only=True))
-        else:
-            print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
-
-    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"[Model] {args.algo.upper()} created with {total_params:,} trainable parameters.")
-
     # Optimizer & Scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
@@ -5396,11 +5386,41 @@ def main():
     # Initialize EMA
     ema = EMAModel(model)
 
+    start_epoch = 1
     best_val_loss = float("inf")
     global_step = 0
 
+    if args.resume:
+        if os.path.exists(args.resume):
+            print(f"[Model] Resuming training from checkpoint: {args.resume}")
+            checkpoint = torch.load(args.resume, map_location=args.device, weights_only=False)
+            
+            if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["model_state_dict"])
+                if "optimizer_state_dict" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                if "scheduler_state_dict" in checkpoint:
+                    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                if "scaler_state_dict" in checkpoint:
+                    scaler.load_state_dict(checkpoint["scaler_state_dict"])
+                if "ema_shadow" in checkpoint:
+                    ema.shadow = checkpoint["ema_shadow"]
+                if "epoch" in checkpoint:
+                    start_epoch = checkpoint["epoch"] + 1
+                if "val_loss" in checkpoint:
+                    best_val_loss = checkpoint["val_loss"]
+                print(f"  --> Resumed from epoch {start_epoch - 1}, best_val_loss {best_val_loss:.5f}")
+            else:
+                model.load_state_dict(checkpoint)
+                print(f"  --> Resumed raw weights only.")
+        else:
+            print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
+
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"[Model] {args.algo.upper()} created with {total_params:,} trainable parameters.")
+
     # Training Loop
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         train_loss_sum = 0.0
         num_train_batches = 0
@@ -5458,32 +5478,34 @@ def main():
         writer.add_scalar("Loss/Val_Epoch", avg_val_loss, epoch)
         writer.add_scalar("LR", scheduler.get_last_lr()[0], epoch)
 
+        # Prepare Checkpoint Dictionary
+        save_model = ema_val_model._orig_mod if hasattr(ema_val_model, "_orig_mod") else ema_val_model
+        checkpoint_dict = {
+            "epoch": epoch,
+            "algo": args.algo,
+            "config": cfg,
+            "obs_dim": full_dataset.obs_dim,
+            "act_dim": full_dataset.act_dim,
+            "model_state_dict": save_model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "scaler_state_dict": scaler.state_dict(),
+            "ema_shadow": ema.shadow,
+            "val_loss": best_val_loss,
+        }
+
         # Save Best Checkpoint (Save EMA weights)
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_ckpt_path = os.path.join(save_dir, "best_model.pt")
             
-            # Uncompile before saving if using torch.compile
-            save_model = ema_val_model._orig_mod if hasattr(ema_val_model, "_orig_mod") else ema_val_model
-            
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "algo": args.algo,
-                    "config": cfg,
-                    "obs_dim": full_dataset.obs_dim,
-                    "act_dim": full_dataset.act_dim,
-                    "model_state_dict": save_model.state_dict(),
-                    "val_loss": best_val_loss,
-                },
-                best_ckpt_path,
-            )
+            torch.save(checkpoint_dict, best_ckpt_path)
             print(f"  --> Saved new best model to {best_ckpt_path} (Val Loss: {best_val_loss:.5f})")
 
         # Periodic checkpoint
         if epoch % cfg.get("save_interval", 20) == 0:
             ckpt_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
-            torch.save(model.state_dict(), ckpt_path)
+            torch.save(checkpoint_dict, ckpt_path)
 
     writer.close()
     print("\n[Training Complete]")
