@@ -341,11 +341,11 @@ def main():
         for batch in pbar:
             batch = {k: v.to(args.device) for k, v in batch.items()}
             
-            if "images" in batch:
+            if "rgb_image" in batch:
                 # Cast uint8 to float32 on GPU (Saves 75% PCIe bandwidth)
-                batch["images"] = batch["images"].float() / 255.0
+                batch["rgb_image"] = batch["rgb_image"].float() / 255.0
                 # Apply ultra-fast GPU augmentation!
-                batch["images"] = apply_gpu_augmentation(batch["images"])
+                batch["rgb_image"] = apply_gpu_augmentation(batch["rgb_image"])
 
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
@@ -383,8 +383,8 @@ def main():
         with torch.no_grad():
             for batch in val_loader:
                 batch = {k: v.to(args.device) for k, v in batch.items()}
-                if "images" in batch:
-                    batch["images"] = batch["images"].float() / 255.0
+                if "rgb_image" in batch:
+                    batch["rgb_image"] = batch["rgb_image"].float() / 255.0
                     
                 with torch.cuda.amp.autocast():
                     loss_dict = ema_val_model.compute_loss(batch)
