@@ -106,7 +106,8 @@ class DualArmDataset(Dataset):
     def get_h5_file(self):
         """Returns a cached HDF5 file handle. Safe for num_workers=0."""
         if self.h5_file is None:
-            self.h5_file = h5py.File(self.dataset_path, "r")
+            # Allocate 2GB of RAM per worker for chunk caching to drastically reduce Gzip CPU overhead
+            self.h5_file = h5py.File(self.dataset_path, "r", rdcc_nbytes=1024**3 * 2)
         return self.h5_file
 
     def save_stats(self, save_path: str):

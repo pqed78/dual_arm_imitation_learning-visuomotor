@@ -217,7 +217,8 @@ def main():
         drop_last=True,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True if num_workers > 0 else False
+        persistent_workers=True if num_workers > 0 else False,
+        prefetch_factor=8 if num_workers > 0 else None
     )
     val_loader = DataLoader(
         val_dataset, 
@@ -225,7 +226,8 @@ def main():
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True if num_workers > 0 else False
+        persistent_workers=True if num_workers > 0 else False,
+        prefetch_factor=8 if num_workers > 0 else None
     )
 
     # Instantiate Model
