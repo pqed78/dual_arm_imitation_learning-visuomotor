@@ -59,8 +59,10 @@ def apply_gpu_augmentation(images):
         
     # 2. Random Crop (Translation)
     pad = 4
-    # Pad H and W
-    images_padded = torch.nn.functional.pad(images, (pad, pad, pad, pad), mode='replicate')
+    # Fold B and T into a 4D tensor (B*T, C, H, W) because PyTorch replicate pad requires 3D/4D tensors
+    images_4d = images.view(B * T, C, H, W)
+    images_padded = torch.nn.functional.pad(images_4d, (pad, pad, pad, pad), mode='replicate')
+    images_padded = images_padded.view(B, T, C, H + pad * 2, W + pad * 2)
     
     # We slice uniquely per batch element, but consistently across T
     # Using a fast loop over B to slice (very fast on GPU as it just modifies tensor views)
