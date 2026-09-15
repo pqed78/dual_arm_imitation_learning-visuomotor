@@ -347,8 +347,11 @@ def main():
                 if "epoch" in checkpoint:
                     start_epoch = checkpoint["epoch"] + 1
                 if "val_loss" in checkpoint:
-                    best_val_loss = checkpoint["val_loss"]
-                print(f"  --> Resumed from epoch {start_epoch - 1}, best_val_loss {best_val_loss:.5f}")
+                    # Ignore old val_loss because the validation set distribution changed significantly
+                    # (due to removing random_split data leakage and adding Augmentation).
+                    # This forces the script to generate a new best_model.pt.
+                    best_val_loss = float("inf")
+                print(f"  --> Resumed from epoch {start_epoch - 1}")
             else:
                 raw_model.load_state_dict(checkpoint)
                 print(f"  --> Resumed raw weights only.")
