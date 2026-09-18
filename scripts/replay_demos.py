@@ -34,7 +34,6 @@ parser.add_argument(
 parser.add_argument("--demo_idx", type=int, default=0, help="Starting index of demo to replay. Negative indices supported.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of demos to play simultaneously.")
 parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
-parser.add_argument("--global_view", action="store_true", help="Record an overarching observer view instead of 1st-person robot views.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 args_cli.enable_cameras = True  # Force enable cameras for rendering
@@ -147,39 +146,48 @@ def main():
     env_cfg.scene.num_envs = num_parallel
     env_cfg.observations = VisuomotorObsCfg()
     
-    if getattr(args_cli, "global_view", False):
-        import math
-        import isaaclab.sim as sim_utils
-        from isaaclab.sensors import CameraCfg
-        
-        # Calculate pitch and yaw to look at (cx, cy, 0.5) from viewer.eye
-        eye_x, eye_y, eye_z = env_cfg.viewer.eye
-        look_x, look_y, look_z = env_cfg.viewer.lookat
-        dx, dy, dz = look_x - eye_x, look_y - eye_y, look_z - eye_z
-        
-        yaw = math.atan2(dy, dx)
-        pitch = math.atan2(-dz, math.sqrt(dx*dx + dy*dy))
-        
-        # Euler to Quaternion (ROS convention: X forward, Z up)
-        cw, sw = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
-        cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-        qw, qx, qy, qz = cw * cp, -sw * sp, cw * sp, sw * cp
-        
-        env_cfg.scene.front_camera = CameraCfg(
-            prim_path="/World/GlobalCamera",
-            update_period=0.0,
-            height=720,
-            width=1280,
-            data_types=["rgb"],
-            spawn=sim_utils.PinholeCameraCfg(
-                focal_length=14.0, focus_distance=400.0, horizontal_aperture=20.955
-            ),
-            offset=CameraCfg.OffsetCfg(
-                pos=env_cfg.viewer.eye,
-                rot=(qw, qx, qy, qz),
-                convention="ros"
-            ),
-        )
+    import math
+    import isaaclab.sim as sim_utils
+    from isaaclab.sensors import CameraCfg
+    from isaaclab.managers import SceneEntityCfg
+    from isaaclab.managers import ObservationTermCfg as ObsTerm
+    import dual_arm0.tasks.dual_arm.mdp as mdp
+    
+    # Calculate pitch and yaw to look at (cx, cy, 0.5) from viewer.eye
+    eye_x, eye_y, eye_z = env_cfg.viewer.eye
+    look_x, look_y, look_z = env_cfg.viewer.lookat
+    dx, dy, dz = look_x - eye_x, look_y - eye_y, look_z - eye_z
+    
+    yaw = math.atan2(dy, dx)
+    pitch = math.atan2(-dz, math.sqrt(dx*dx + dy*dy))
+    
+    # Euler to Quaternion (ROS convention: X forward, Z up)
+    cw, sw = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+    qw, qx, qy, qz = cw * cp, -sw * sp, cw * sp, sw * cp
+    
+    # Add a global overarching camera to the scene (outside ENV_REGEX_NS so it's a singleton)
+    env_cfg.scene.global_camera = CameraCfg(
+        prim_path="/World/GlobalCamera",
+        update_period=0.0,
+        height=720,
+        width=1280,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=14.0, focus_distance=400.0, horizontal_aperture=20.955
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=env_cfg.viewer.eye,
+            rot=(qw, qx, qy, qz),
+            convention="ros"
+        ),
+    )
+    
+    # Request the global_camera image in the observation manager
+    env_cfg.observations.image.global_rgb = ObsTerm(
+        func=mdp.image,
+        params={"sensor_cfg": SceneEntityCfg("global_camera"), "data_type": "rgb"},
+    )
 
     try:
         gym.register(
@@ -193,8 +201,10 @@ def main():
     env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
     env.reset()
     
-    # Setup Video Writer
-    video_out = None
+    # Setup Video Writers
+    os.makedirs("videos", exist_ok=True)
+    cctv_video_out = None
+    global_video_out = None
     
     print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
     
@@ -248,28 +258,25 @@ def main():
         # Display camera view
         if "image" not in obs_dict:
             print(f"DEBUG: 'image' not in obs_dict. Keys are: {list(obs_dict.keys())}")
-        if "image" in obs_dict and "rgb" in obs_dict["image"]:
-            rgb_data = obs_dict["image"]["rgb"]
-            if rgb_data is not None:
-
+        if "image" in obs_dict:
+            # 1. CCTV Video (from 'rgb' sensor)
+            if "rgb" in obs_dict["image"] and obs_dict["image"]["rgb"] is not None:
+                rgb_data = obs_dict["image"]["rgb"]
                 rgb_np = rgb_data.clone().detach().cpu().numpy()
                 if rgb_np.dtype != np.uint8:
                     if rgb_np.max() <= 1.0:
                         rgb_np = (rgb_np * 255.0)
                     rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
                 
-                if getattr(args_cli, "global_view", False):
-                    grid_img = rgb_np[0] # Global camera yields a single image
-                else:
-                    # Create a 2D grid instead of a 1D strip to prevent video player cropping
-                    n_imgs = num_parallel
-                    n_cols = math.ceil(math.sqrt(n_imgs))
-                    n_rows = math.ceil(n_imgs / n_cols)
-                    h_img, w_img, c_img = rgb_np[0].shape
-                    grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
-                    for i in range(num_parallel):
-                        row, col = divmod(i, n_cols)
-                        grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = rgb_np[i]
+                # Create a 2D grid
+                n_imgs = num_parallel
+                n_cols = math.ceil(math.sqrt(n_imgs))
+                n_rows = math.ceil(n_imgs / n_cols)
+                h_img, w_img, c_img = rgb_np[0].shape
+                grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
+                for i in range(num_parallel):
+                    row, col = divmod(i, n_cols)
+                    grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = rgb_np[i]
                 
                 # Convert to BGR for OpenCV
                 if grid_img.shape[-1] == 3:
@@ -277,27 +284,49 @@ def main():
                 elif grid_img.shape[-1] == 4:
                     grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
                     
-                if not getattr(args_cli, "global_view", False):
-                    # Add camera position text to the first image (skip for global view to keep it clean)
-                    cam_pos = env.scene["front_camera"].data.pos_w[0].cpu().numpy()
-                    cam_text = f"Cam Pos: [{cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f}]"
-                    cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                # Add camera position text to the first image
+                cam_pos = env.scene["front_camera"].data.pos_w[0].cpu().numpy()
+                cam_text = f"Cam Pos: [{cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f}]"
+                cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 
-                # Write to video
-                if video_out is None:
+                # Write to CCTV video
+                if cctv_video_out is None:
                     h, w = grid_img.shape[:2]
                     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    video_out = cv2.VideoWriter('replay_video.mp4', fourcc, 30.0, (w, h))
-                video_out.write(grid_img)
+                    cctv_video_out = cv2.VideoWriter('videos/cctv_video.mp4', fourcc, 30.0, (w, h))
+                cctv_video_out.write(grid_img)
+
+            # 2. Global Overarching Video (from 'global_rgb' sensor)
+            if "global_rgb" in obs_dict["image"] and obs_dict["image"]["global_rgb"] is not None:
+                g_rgb_data = obs_dict["image"]["global_rgb"]
+                g_rgb_np = g_rgb_data.clone().detach().cpu().numpy()[0] # Shape is (1, H, W, 3)
+                if g_rgb_np.dtype != np.uint8:
+                    if g_rgb_np.max() <= 1.0:
+                        g_rgb_np = (g_rgb_np * 255.0)
+                    g_rgb_np = np.clip(g_rgb_np, 0, 255).astype(np.uint8)
+                
+                if g_rgb_np.shape[-1] == 3:
+                    g_rgb_np = cv2.cvtColor(g_rgb_np, cv2.COLOR_RGB2BGR)
+                elif g_rgb_np.shape[-1] == 4:
+                    g_rgb_np = cv2.cvtColor(g_rgb_np, cv2.COLOR_RGBA2BGR)
+                    
+                if global_video_out is None:
+                    h, w = g_rgb_np.shape[:2]
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    global_video_out = cv2.VideoWriter('videos/global_video.mp4', fourcc, 30.0, (w, h))
+                global_video_out.write(g_rgb_np)
         
         if args_cli.delay > 0:
             time.sleep(args_cli.delay)
 
     print("Finished kinematic replay.")
     time.sleep(2.0)
-    if video_out is not None:
-        video_out.release()
-        print("Saved replay video to replay_video.mp4")
+    if cctv_video_out is not None:
+        cctv_video_out.release()
+        print("Saved CCTV video to videos/cctv_video.mp4")
+    if global_video_out is not None:
+        global_video_out.release()
+        print("Saved Global overarching video to videos/global_video.mp4")
     env.close()
     simulation_app.close()
 
