@@ -151,7 +151,7 @@ def main():
     from isaaclab.sensors import CameraCfg
     from isaaclab.managers import SceneEntityCfg
     from isaaclab.managers import ObservationTermCfg as ObsTerm
-    import dual_arm0.tasks.dual_arm.mdp as mdp
+    import isaaclab.envs.mdp as mdp
     
     # Calculate pitch and yaw to look at (cx, cy, 0.5) from viewer.eye
     eye_x, eye_y, eye_z = env_cfg.viewer.eye
