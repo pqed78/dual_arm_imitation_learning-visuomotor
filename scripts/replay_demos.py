@@ -166,9 +166,9 @@ def main():
     cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
     qw, qx, qy, qz = cw * cp, -sw * sp, cw * sp, sw * cp
     
-    # Add a global overarching camera to the scene (outside ENV_REGEX_NS so it's a singleton)
+    # Add a global overarching camera to the scene (inside ENV_REGEX_NS to avoid indexing bugs in scene.reset)
     env_cfg.scene.global_camera = CameraCfg(
-        prim_path="/World/GlobalCamera",
+        prim_path="{ENV_REGEX_NS}/GlobalCamera",
         update_period=0.0,
         height=720,
         width=1280,
