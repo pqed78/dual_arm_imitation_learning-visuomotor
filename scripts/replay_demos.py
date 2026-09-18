@@ -124,17 +124,15 @@ def main():
     # Viewer & Recording Setup (Fixing Cropped FOV)
     # -------------------------------------------------------------
     env_cfg.viewer.resolution = (1920, 1080)
-    if num_parallel > 1:
-        import math
-        # Isaac Lab arranges environments in a 2D grid
-        n_cols = math.ceil(math.sqrt(num_parallel))
-        env_spacing = env_cfg.scene.env_spacing
-        cx = (n_cols - 1) * env_spacing / 2.0
-        cy = (n_cols - 1) * env_spacing / 2.0
-        
-        # Pull the camera back and up to capture all parallel environments in the grid
-        env_cfg.viewer.eye = (cx + 3.0 + n_cols * 1.5, cy, 2.0 + n_cols * 1.5)
-        env_cfg.viewer.lookat = (cx, cy, 0.5)
+    if num_parallel == 1:
+        env_cfg.viewer.eye = (1.5, 0.0, 1.2)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+    else:
+        # Pull camera back and up for grid view
+        offset = max(2.0, (num_parallel ** 0.5) * 1.5)
+        env_cfg.viewer.eye = (offset, offset, offset * 0.8)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+        env_cfg.viewer.origin_type = "world"
     
     # FOR KINEMATIC REPLAY: Disable physics on the object so it doesn't fall or get pushed
     if hasattr(env_cfg.scene, "object") and hasattr(env_cfg.scene.object, "spawn"):
@@ -145,44 +143,6 @@ def main():
         )
     env_cfg.scene.num_envs = num_parallel
     env_cfg.observations = VisuomotorObsCfg()
-    
-    import math
-    import isaaclab.sim as sim_utils
-    from isaaclab.sensors import CameraCfg
-    from isaaclab.managers import SceneEntityCfg
-    from isaaclab.managers import ObservationTermCfg as ObsTerm
-    import isaaclab.envs.mdp as mdp
-    
-    # Look straight down from 10 meters high at the center of the grid
-    pos_x, pos_y = cx, cy
-    pos_z = 10.0
-    
-    # USD camera natively looks down the -Z axis (straight down towards the ground)
-    # with +Y as up. We can just use the identity quaternion in "world" convention!
-    qw, qx, qy, qz = 1.0, 0.0, 0.0, 0.0
-    
-    # Add a global overarching camera to the scene (inside ENV_REGEX_NS to avoid indexing bugs in scene.reset)
-    env_cfg.scene.global_camera = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/GlobalCamera",
-        update_period=0.0,
-        height=720,
-        width=1280,
-        data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=14.0, focus_distance=400.0, horizontal_aperture=20.955
-        ),
-        offset=CameraCfg.OffsetCfg(
-            pos=(pos_x, pos_y, pos_z),
-            rot=(qw, qx, qy, qz),
-            convention="world"
-        ),
-    )
-    
-    # Request the global_camera image in the observation manager
-    env_cfg.observations.image.global_rgb = ObsTerm(
-        func=mdp.image,
-        params={"sensor_cfg": SceneEntityCfg("global_camera"), "data_type": "rgb"},
-    )
 
     try:
         gym.register(
@@ -193,7 +153,7 @@ def main():
         )
     except Exception:
         pass
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg, render_mode="rgb_array").unwrapped
     env.reset()
     
     # Setup Video Writers
@@ -291,12 +251,12 @@ def main():
                     cctv_video_out = cv2.VideoWriter('videos/cctv_video.mp4', fourcc, 30.0, (w, h))
                 cctv_video_out.write(grid_img)
 
-            # 2. Global Overarching Video (from 'global_rgb' sensor)
-            if "global_rgb" in obs_dict["image"] and obs_dict["image"]["global_rgb"] is not None:
-                g_rgb_data = obs_dict["image"]["global_rgb"]
-                g_rgb_np = g_rgb_data.clone().detach().cpu().numpy()[0] # Shape is (1, H, W, 3)
+            # 2. Global Overarching Video (from env.render())
+            global_img = env.render()
+            if global_img is not None:
+                g_rgb_np = np.array(global_img)
                 if g_rgb_np.dtype != np.uint8:
-                    if g_rgb_np.max() <= 10.0: # Allow HDR specular highlights > 1.0
+                    if g_rgb_np.max() <= 10.0:
                         g_rgb_np = (g_rgb_np * 255.0)
                     g_rgb_np = np.clip(g_rgb_np, 0, 255).astype(np.uint8)
                 
