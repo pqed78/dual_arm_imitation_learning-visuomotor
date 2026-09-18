@@ -259,7 +259,7 @@ def main():
                 rgb_data = obs_dict["image"]["rgb"]
                 rgb_np = rgb_data.clone().detach().cpu().numpy()
                 if rgb_np.dtype != np.uint8:
-                    if rgb_np.max() <= 1.0:
+                    if rgb_np.max() <= 10.0: # Allow HDR specular highlights > 1.0
                         rgb_np = (rgb_np * 255.0)
                     rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
                 
@@ -296,7 +296,7 @@ def main():
                 g_rgb_data = obs_dict["image"]["global_rgb"]
                 g_rgb_np = g_rgb_data.clone().detach().cpu().numpy()[0] # Shape is (1, H, W, 3)
                 if g_rgb_np.dtype != np.uint8:
-                    if g_rgb_np.max() <= 1.0:
+                    if g_rgb_np.max() <= 10.0: # Allow HDR specular highlights > 1.0
                         g_rgb_np = (g_rgb_np * 255.0)
                     g_rgb_np = np.clip(g_rgb_np, 0, 255).astype(np.uint8)
                 
