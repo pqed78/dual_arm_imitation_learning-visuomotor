@@ -178,17 +178,23 @@ def main():
             j_traj = all_joint_traj[i]
             idx = min(step_idx, len(o_traj) - 1)
             
-            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device) + env.scene.env_origins[i]
+            # If init_robot_pos was recorded, we use it to deduce the original env_origin during generation.
+            # Assuming the robot base is spawned at local (0,0,0), its recorded world position IS the old env_origin.
+            if all_init_robot_pos[i] is not None:
+                gen_env_origin = torch.tensor(all_init_robot_pos[i], device=env.device)
+                rob_state[i, :3] = env.scene.env_origins[i] # Robot spawns at new env_origin
+                rob_state[i, 3:7] = torch.tensor(all_init_robot_quat[i], device=env.device)
+            else:
+                gen_env_origin = torch.zeros(3, device=env.device)
+            
+            # Object world pos = (Old World Pos - Old Env Origin) + New Env Origin
+            obj_state[i, :3] = (torch.tensor(o_traj[idx, :3], device=env.device) - gen_env_origin) + env.scene.env_origins[i]
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             
             if all_init_target_pos[i] is not None:
-                tgt_state[i, :3] = torch.tensor(all_init_target_pos[i], device=env.device) + env.scene.env_origins[i]
+                tgt_state[i, :3] = (torch.tensor(all_init_target_pos[i], device=env.device) - gen_env_origin) + env.scene.env_origins[i]
                 tgt_state[i, 3:7] = torch.tensor(all_init_target_quat[i], device=env.device)
-                
-            if all_init_robot_pos[i] is not None:
-                rob_state[i, :3] = torch.tensor(all_init_robot_pos[i], device=env.device) + env.scene.env_origins[i]
-                rob_state[i, 3:7] = torch.tensor(all_init_robot_quat[i], device=env.device)
             
         env.scene["object"].write_root_state_to_sim(obj_state)
         env.scene["target"].write_root_state_to_sim(tgt_state)
