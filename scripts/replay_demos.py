@@ -153,18 +153,13 @@ def main():
     from isaaclab.managers import ObservationTermCfg as ObsTerm
     import isaaclab.envs.mdp as mdp
     
-    # Calculate pitch and yaw to look at (cx, cy, 0.5) from viewer.eye
-    eye_x, eye_y, eye_z = env_cfg.viewer.eye
-    look_x, look_y, look_z = env_cfg.viewer.lookat
-    dx, dy, dz = look_x - eye_x, look_y - eye_y, look_z - eye_z
+    # Look straight down from 10 meters high at the center of the grid
+    pos_x, pos_y = cx, cy
+    pos_z = 10.0
     
-    yaw = math.atan2(dy, dx)
-    pitch = math.atan2(-dz, math.sqrt(dx*dx + dy*dy))
-    
-    # Euler to Quaternion (ROS convention: X forward, Z up)
-    cw, sw = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
-    cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    qw, qx, qy, qz = cw * cp, -sw * sp, cw * sp, sw * cp
+    # USD camera natively looks down the -Z axis (straight down towards the ground)
+    # with +Y as up. We can just use the identity quaternion in "world" convention!
+    qw, qx, qy, qz = 1.0, 0.0, 0.0, 0.0
     
     # Add a global overarching camera to the scene (inside ENV_REGEX_NS to avoid indexing bugs in scene.reset)
     env_cfg.scene.global_camera = CameraCfg(
@@ -177,9 +172,9 @@ def main():
             focal_length=14.0, focus_distance=400.0, horizontal_aperture=20.955
         ),
         offset=CameraCfg.OffsetCfg(
-            pos=env_cfg.viewer.eye,
+            pos=(pos_x, pos_y, pos_z),
             rot=(qw, qx, qy, qz),
-            convention="ros"
+            convention="world"
         ),
     )
     
