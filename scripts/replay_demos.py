@@ -182,7 +182,10 @@ def main():
             # Assuming the robot base is spawned at local (0,0,0), its recorded world position IS the old env_origin.
             if all_init_robot_pos[i] is not None:
                 gen_env_origin = torch.tensor(all_init_robot_pos[i], device=env.device)
-                rob_state[i, :3] = env.scene.env_origins[i] # Robot spawns at new env_origin
+                gen_env_origin[2] = 0.0  # Environment origins are always 2D (Z=0)
+                
+                # Robot world pos = (Old World Pos - Old Env Origin) + New Env Origin
+                rob_state[i, :3] = (torch.tensor(all_init_robot_pos[i], device=env.device) - gen_env_origin) + env.scene.env_origins[i]
                 rob_state[i, 3:7] = torch.tensor(all_init_robot_quat[i], device=env.device)
             else:
                 gen_env_origin = torch.zeros(3, device=env.device)
