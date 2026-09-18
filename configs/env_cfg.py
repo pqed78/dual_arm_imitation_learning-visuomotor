@@ -96,7 +96,7 @@ class DualArmILEnvCfg(DualArmEnvCfg):
         self.scene.env_spacing = 2.5
 
         # Episode settings for teleoperation & evaluation
-        self.episode_length_s = 25.0  # 25 seconds per episode to give human ample time
+        self.episode_length_s = 50.0  # 50 seconds per episode (1500 steps at 30Hz)
         self.decimation = 2           # 60Hz / 2 = 30Hz control frequency
 
         # Camera viewer position for comfortable human teleoperation view
