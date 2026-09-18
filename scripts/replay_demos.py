@@ -34,6 +34,7 @@ parser.add_argument(
 parser.add_argument("--demo_idx", type=int, default=0, help="Starting index of demo to replay. Negative indices supported.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of demos to play simultaneously.")
 parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
+parser.add_argument("--global_view", action="store_true", help="Record an overarching observer view instead of 1st-person robot views.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 args_cli.enable_cameras = True  # Force enable cameras for rendering
@@ -145,6 +146,40 @@ def main():
         )
     env_cfg.scene.num_envs = num_parallel
     env_cfg.observations = VisuomotorObsCfg()
+    
+    if getattr(args_cli, "global_view", False):
+        import math
+        import isaaclab.sim as sim_utils
+        from isaaclab.sensors import CameraCfg
+        
+        # Calculate pitch and yaw to look at (cx, cy, 0.5) from viewer.eye
+        eye_x, eye_y, eye_z = env_cfg.viewer.eye
+        look_x, look_y, look_z = env_cfg.viewer.lookat
+        dx, dy, dz = look_x - eye_x, look_y - eye_y, look_z - eye_z
+        
+        yaw = math.atan2(dy, dx)
+        pitch = math.atan2(-dz, math.sqrt(dx*dx + dy*dy))
+        
+        # Euler to Quaternion (ROS convention: X forward, Z up)
+        cw, sw = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+        cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+        qw, qx, qy, qz = cw * cp, -sw * sp, cw * sp, sw * cp
+        
+        env_cfg.scene.front_camera = CameraCfg(
+            prim_path="/World/GlobalCamera",
+            update_period=0.0,
+            height=720,
+            width=1280,
+            data_types=["rgb"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=14.0, focus_distance=400.0, horizontal_aperture=20.955
+            ),
+            offset=CameraCfg.OffsetCfg(
+                pos=env_cfg.viewer.eye,
+                rot=(qw, qx, qy, qz),
+                convention="ros"
+            ),
+        )
 
     try:
         gym.register(
@@ -223,19 +258,18 @@ def main():
                         rgb_np = (rgb_np * 255.0)
                     rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
                 
-                # Create a 2D grid instead of a 1D strip to prevent video player cropping
-                n_imgs = num_parallel
-                n_cols = math.ceil(math.sqrt(n_imgs))
-                n_rows = math.ceil(n_imgs / n_cols)
-                h_img, w_img, c_img = rgb_np[0].shape
-                grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
-                for i in range(num_parallel):
-                    row, col = divmod(i, n_cols)
-                    grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = rgb_np[i]
-                
-                # Add camera position text to the first image
-                cam_pos = env.scene["front_camera"].data.pos_w[0].cpu().numpy()
-                cam_text = f"Cam Pos: [{cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f}]"
+                if getattr(args_cli, "global_view", False):
+                    grid_img = rgb_np[0] # Global camera yields a single image
+                else:
+                    # Create a 2D grid instead of a 1D strip to prevent video player cropping
+                    n_imgs = num_parallel
+                    n_cols = math.ceil(math.sqrt(n_imgs))
+                    n_rows = math.ceil(n_imgs / n_cols)
+                    h_img, w_img, c_img = rgb_np[0].shape
+                    grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
+                    for i in range(num_parallel):
+                        row, col = divmod(i, n_cols)
+                        grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = rgb_np[i]
                 
                 # Convert to BGR for OpenCV
                 if grid_img.shape[-1] == 3:
@@ -243,7 +277,11 @@ def main():
                 elif grid_img.shape[-1] == 4:
                     grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
                     
-                cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                if not getattr(args_cli, "global_view", False):
+                    # Add camera position text to the first image (skip for global view to keep it clean)
+                    cam_pos = env.scene["front_camera"].data.pos_w[0].cpu().numpy()
+                    cam_text = f"Cam Pos: [{cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f}]"
+                    cv2.putText(grid_img, cam_text, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                 
                 # Write to video
                 if video_out is None:
