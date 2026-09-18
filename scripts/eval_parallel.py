@@ -196,8 +196,10 @@ def main():
             # ---------------------------------
             
             img_obs = raw_img.float()
-            if img_obs.max() > 1.0:
+            if img_obs.max() > 10.0:
                 img_obs = img_obs / 255.0
+            
+            img_obs = torch.clamp(img_obs, 0.0, 1.0)
             img_obs = img_obs.permute(0, 3, 1, 2)
 
             with torch.no_grad():
