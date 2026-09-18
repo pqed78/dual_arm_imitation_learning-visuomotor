@@ -246,6 +246,23 @@ To attach a camera dynamically to the robot's wrist without modifying the USD fi
 
 ---
 
+
+## 7. Known Limitations & Potential Improvements 🚀
+
+### State-based vs. Visuomotor Generalization
+When training with State-based Imitation Learning (using explicit XYZ coordinates), the model can often recover from simple mistakes (e.g., missing the grasp). Because the state space is low-dimensional and continuous, the neural network easily generalizes the vector math (`Target XYZ - Hand XYZ`). 
+
+However, **Visuomotor policies** rely entirely on high-dimensional pixel data. If the robot misses a grasp, the arm's posture deviates from the training demonstrations. This causes the camera's visual perspective (occlusions, shadows, arm angles) to become a completely novel, Out-of-Distribution (OOD) image. The Vision Encoder fails to process this unseen visual state, leading to compounding errors where the robot flails aimlessly and gives up.
+
+### How to Improve (Gaining Failure-Recovery Skills)
+Since `generate_scripted_demos_parallel.py` only generates 100% perfect FSM trajectories, the policy acts like a student who only memorized the answer sheet. To make the robot robust, the dataset must include failure and recovery behaviors:
+1. **Human Teleoperation Demos**: Humans naturally make and correct small mistakes during manual teleoperation (`collect_demos.py`). Injecting 20-30 human demos into the dataset provides the network with crucial recovery trajectories.
+2. **DAgger (Dataset Aggregation)**: Periodically run the trained policy, let it make mistakes, and have a human operator immediately take over to correct them. Add these correction trajectories back to the dataset.
+3. **Visual Domain Randomization**: Apply heavy visual augmentations (lighting, camera shifts) during training so the vision encoder learns robust geometric features rather than overfitting to specific pixel patterns.
+
+
+---
+
 # Dual Arm Visuomotor Imitation Learning (비주얼 모터 모방 학습) 프로젝트
 
 기존 강화학습(RL, `dual_arm0`) 환경과 완벽히 격리된 **독립적인 Visuomotor 모방 학습(Imitation Learning, IL)** 프로젝트입니다.  
@@ -495,6 +512,23 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 
 - 본 폴더(`dual_arm_il_visuo`)의 모든 코드는 `/home/optimus/isaac_lab/dual_arm0`의 파일을 수정하지 않습니다.
 - 시뮬레이션 씬(`DualArmSceneCfg`) 및 로봇 정의는 환경에 설치된 설정을 안전하게 상속(`configs/env_cfg.py`)받아 재사용하므로, RL 쪽에서 현재 진행 중인 학습이나 튜닝에 아무런 간섭을 주지 않습니다.
+
+---
+
+
+## 7. 알려진 한계점 및 개선 방향 (Limitations & Improvements) 🚀
+
+### 좌표(State) 기반 vs 비전(Visuomotor) 기반 모방학습의 차이
+과거 로봇 관절과 물체의 3D 좌표(x,y,z) 숫자만으로 모방학습(State-based IL)을 했을 때는, 로봇이 물건을 놓쳐도 다시 주우러 가는 복구(Recovery) 능력을 보여주었습니다. 숫자는 차원이 낮고 연속적이어서 약간의 오차가 발생해도 신경망이 `물체 좌표 - 손 좌표`의 수학적 일반화(Generalization)를 쉽게 해내기 때문입니다.
+
+하지만 **비전(Visuomotor) 모델**은 수십만 개의 픽셀에 전적으로 의존합니다. 로봇이 한 번 헛손질을 해서 데모에 없던 자세를 취하게 되면, 카메라 화면의 픽셀 패턴, 팔의 가림 현상(Occlusion), 그림자 등이 훈련 데이터에 없는 완전히 낯선 형태(Out-of-Distribution)로 붕괴됩니다. 비전 모델은 이 낯선 화면을 유추하지 못해 뇌정지가 오고 팔을 허공에 휘젓는 누적 오차(Compounding Error) 현상을 겪게 됩니다.
+
+### 성능 개선 방안 (실패 복구 능력 확보)
+현재의 `generate_scripted_demos_parallel.py`는 단 한 번의 실수도 없는 완벽한 정답지만 만들어냅니다. 인공지능이 실수에 대처하게 만들려면 다음과 같은 기법들이 추가되어야 합니다:
+1. **복구 데모 수집 (Teleoperation)**: 사람이 직접 조종(`collect_demos.py`)하여 의도적으로 물건을 놓치거나 살짝 빗겨 잡은 뒤, 다시 궤도를 수정해서 줍는 "인간의 자연스러운 실수와 복구 과정" 데이터를 수집하여 스크립트 데모와 섞어 학습시켜야 합니다.
+2. **DAgger (Dataset Aggregation)**: 학습된 로봇을 직접 구동시키다가 실수를 할 때 사람이 조종권을 빼앗아 올바른 행동으로 교정해 주고, 이 교정 데이터를 다시 훈련 데이터셋에 추가(Aggregation)하는 방식입니다.
+3. **시각적 도메인 무작위화 (Domain Randomization)**: 조명, 카메라 위치, 텍스처 등에 강한 노이즈를 주어 비전 인코더가 단순히 픽셀을 외우지 않고 핵심 형상 특징(Feature)에 집중하도록 강제해야 합니다.
+
 
 ---
 
