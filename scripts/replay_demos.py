@@ -8,6 +8,7 @@ to visually inspect and verify motion quality and task success.
 """
 
 import argparse
+import math
 import os
 import sys
 import time
