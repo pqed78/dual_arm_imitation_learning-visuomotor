@@ -22,7 +22,8 @@ parser.add_argument("--algo", type=str, required=True, choices=["bc", "diffusion
 parser.add_argument("--checkpoint", type=str, required=False, default=None)
 parser.add_argument("--num_episodes", type=int, default=100, help="Total episodes to evaluate")
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments")
-parser.add_argument("--max_steps_per_ep", type=int, default=1500)
+parser.add_argument("--max_steps_per_ep", type=int, default=700)
+parser.add_argument("--record_video", action="store_true", help="Record videos of the evaluation (Warning: causes CPU bottleneck and slows down evaluation).")
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -44,6 +45,37 @@ gym.register(
         "env_cfg_entry_point": DualArmILEnvCfg,
     },
 )
+import threading
+import queue
+
+class AsyncVideoWriter:
+    """Writes video frames in a background thread to prevent CPU bottlenecking the main RL loop."""
+    def __init__(self, path, fourcc, fps, size):
+        self.writer = cv2.VideoWriter(path, fourcc, fps, size)
+        self.q = queue.Queue(maxsize=300) # Buffer approx 10 seconds of frames
+        self.running = True
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
+
+    def write(self, frame):
+        if not self.q.full():
+            self.q.put(frame)
+        else:
+            print("[Warning] Video encoding queue full! Dropping frame to preserve RL speed.")
+
+    def _worker(self):
+        while self.running or not self.q.empty():
+            try:
+                frame = self.q.get(timeout=0.1)
+                self.writer.write(frame)
+                self.q.task_done()
+            except queue.Empty:
+                pass
+
+    def release(self):
+        self.running = False
+        self.thread.join()
+        self.writer.release()
 
 def main():
     device = torch.device(args_cli.device)
@@ -126,7 +158,7 @@ def main():
         env_cfg.viewer.eye = (cx + 3.0 + n_cols * 1.5, cy, 2.0 + n_cols * 1.5)
         env_cfg.viewer.lookat = (cx, cy, 0.5)
     print("[Eval] Initializing Isaac Lab Environment...")
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg, render_mode="rgb_array").unwrapped
 
     obs_horizon = cfg.get("obs_horizon", 2)
     act_horizon = cfg.get("act_horizon", 8)
@@ -140,6 +172,7 @@ def main():
     total_success = 0
     total_evaluated = 0
     video_out = None
+    global_video_out = None
 
     for batch_idx in range(num_batches):
         print(f"\n=== Batch {batch_idx + 1}/{num_batches} ===")
@@ -167,36 +200,55 @@ def main():
             raw_img = obs["image"]["rgb"].to(device)
             
             # --- Record front_camera video ---
-            rgb_np = raw_img.clone().detach().cpu().numpy()
-            if rgb_np.dtype != np.uint8:
-                if rgb_np.max() <= 1.0:
-                    rgb_np = (rgb_np * 255.0)
-                rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
+            # --- Record Videos (Only if enabled, to prevent CPU bottleneck) ---
+            if args_cli.record_video:
+                rgb_np = raw_img.clone().detach().cpu().numpy()
+                if rgb_np.dtype != np.uint8:
+                    if rgb_np.max() <= 1.0:
+                        rgb_np = (rgb_np * 255.0)
+                    rgb_np = np.clip(rgb_np, 0, 255).astype(np.uint8)
+                    
+                # Create a 2D grid instead of a 1D strip to prevent video player cropping
+                n_imgs = len(rgb_np)
+                n_cols = math.ceil(math.sqrt(n_imgs))
+                n_rows = math.ceil(n_imgs / n_cols)
+                h_img, w_img, c_img = rgb_np[0].shape
+                grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
+                for i, img in enumerate(rgb_np):
+                    row, col = divmod(i, n_cols)
+                    grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = img
                 
-            # Create a 2D grid instead of a 1D strip to prevent video player cropping
-            n_imgs = len(rgb_np)
-            n_cols = math.ceil(math.sqrt(n_imgs))
-            n_rows = math.ceil(n_imgs / n_cols)
-            h_img, w_img, c_img = rgb_np[0].shape
-            grid_img = np.zeros((n_rows * h_img, n_cols * w_img, c_img), dtype=rgb_np.dtype)
-            for i, img in enumerate(rgb_np):
-                row, col = divmod(i, n_cols)
-                grid_img[row*h_img:(row+1)*h_img, col*w_img:(col+1)*w_img] = img
-            
-            if grid_img.shape[-1] == 3:
-                grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR)
-            elif grid_img.shape[-1] == 4:
-                grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
+                if grid_img.shape[-1] == 3:
+                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGB2BGR)
+                elif grid_img.shape[-1] == 4:
+                    grid_img = cv2.cvtColor(grid_img, cv2.COLOR_RGBA2BGR)
+                    
+                if video_out is None:
+                    h, w = grid_img.shape[:2]
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    video_out = AsyncVideoWriter(os.path.join(save_dir, 'eval_front_camera.mp4'), fourcc, 30.0, (w, h))
+                video_out.write(grid_img)
                 
-            if video_out is None:
-                h, w = grid_img.shape[:2]
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                video_out = cv2.VideoWriter(os.path.join(save_dir, 'eval_front_camera.mp4'), fourcc, 30.0, (w, h))
-            video_out.write(grid_img)
+                # --- Record Global Observer Video ---
+                global_img = env.render()
+                if global_img is not None:
+                    if isinstance(global_img, list):
+                        global_img = global_img[0]
+                    g_rgb_np = global_img.cpu().numpy() if torch.is_tensor(global_img) else np.array(global_img)
+                    if g_rgb_np.shape[-1] == 3:
+                        g_rgb_np = cv2.cvtColor(g_rgb_np, cv2.COLOR_RGB2BGR)
+                    elif g_rgb_np.shape[-1] == 4:
+                        g_rgb_np = cv2.cvtColor(g_rgb_np, cv2.COLOR_RGBA2BGR)
+                        
+                    if global_video_out is None:
+                        h, w = g_rgb_np.shape[:2]
+                        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                        global_video_out = AsyncVideoWriter(os.path.join(save_dir, 'eval_global_camera.mp4'), fourcc, 30.0, (w, h))
+                    global_video_out.write(g_rgb_np)
             # ---------------------------------
             
             img_obs = raw_img.float()
-            if img_obs.max() > 10.0:
+            if raw_img.dtype == torch.uint8:
                 img_obs = img_obs / 255.0
             
             img_obs = torch.clamp(img_obs, 0.0, 1.0)
@@ -219,10 +271,12 @@ def main():
                         obs_tensor = torch.stack(list(obs_queue), dim=0).permute(1, 0, 2)
                         img_tensor = torch.stack(list(img_queue), dim=0).permute(1, 0, 2, 3, 4)
                         
-                        infer_steps = 15 # using fast inference
-                        pred_act_chunk = model.predict_action(obs_tensor, img_tensor, num_inference_steps=infer_steps, use_ddim=True)
+                        infer_steps = 15 # will be ignored by use_ddim=False
+                        pred_act_chunk = model.predict_action(obs_tensor, img_tensor, num_inference_steps=infer_steps, use_ddim=False)
                         
-                        for a_idx in range(min(act_horizon, pred_act_chunk.shape[1])):
+                        start_a_idx = obs_horizon - 1
+                        end_a_idx = start_a_idx + act_horizon
+                        for a_idx in range(start_a_idx, min(end_a_idx, pred_act_chunk.shape[1])):
                             act_unnorm = pred_act_chunk[:, a_idx, :] * act_std + act_mean
                             action_queue.append(act_unnorm)
 
@@ -248,7 +302,7 @@ def main():
             dist_to_target = torch.norm(obj_pos[:, :2] - target_pos[:, :2], dim=1)
 
             # Success condition
-            is_success = (dist_to_target < 0.12) & (obj_pos[:, 2] < 0.05)
+            is_success = (dist_to_target < 0.15) & (obj_pos[:, 2] < 0.06)
             newly_succeeded = is_success & ~batch_done
             
             for env_idx in newly_succeeded.nonzero(as_tuple=True)[0]:
@@ -268,7 +322,12 @@ def main():
 
             newly_failed = (is_dropped | is_spinning | term_mask | trunc_mask) & ~batch_done
             for env_idx in newly_failed.nonzero(as_tuple=True)[0]:
-                print(f"  [Env {env_idx.item()}] FAILED (Dropped or OOD). (Step: {step})")
+                reasons = []
+                if is_dropped[env_idx]: reasons.append("Dropped")
+                if is_spinning[env_idx]: reasons.append(f"Spinning (vel={joint_vel[env_idx].abs().max().item():.2f})")
+                if term_mask[env_idx]: reasons.append("Terminated")
+                if trunc_mask[env_idx]: reasons.append("Truncated")
+                print(f"  [Env {env_idx.item()}] FAILED: {', '.join(reasons)}. (Step: {step})")
             
             batch_done |= newly_failed
 
@@ -308,6 +367,10 @@ def main():
     if video_out is not None:
         video_out.release()
         print(f"Saved evaluation front camera video to {os.path.join(save_dir, 'eval_front_camera.mp4')}")
+        
+    if global_video_out is not None:
+        global_video_out.release()
+        print(f"Saved evaluation global camera video to {os.path.join(save_dir, 'eval_global_camera.mp4')}")
 
     env.close()
     simulation_app.close()
